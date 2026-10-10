@@ -1,9 +1,21 @@
-@source "../node_modules/@cloudflare/kumo/dist/**/*.{js,jsx,ts,tsx}";
-@import "@cloudflare/kumo/styles";
 @import "tailwindcss";
-@plugin "@tailwindcss/typography";
 
-/* App-level layout */
+/* ---------------------------------------------------------------------------
+ * Design tokens — Reeder-style minimal, warm paper tones.
+ * All colors use light-dark() so they follow colorScheme on <html>.
+ * ------------------------------------------------------------------------- */
+@theme inline {
+  --color-canvas: light-dark(#faf9f7, #121212);
+  --color-panel: light-dark(#f3f2ef, #191919);
+  --color-card: light-dark(#eceae6, #222220);
+  --color-line: light-dark(#e3e1dc, #2a2a29);
+  --color-ink: light-dark(#1f1d1a, #e9e7e2);
+  --color-ink-2: light-dark(#6e6a63, #a3a09a);
+  --color-ink-3: light-dark(#a8a39b, #6e6a64);
+  --color-accent: light-dark(#d9480f, #ff8a3d);
+  --color-accent-soft: light-dark(#fbe4d8, #3d2417);
+}
+
 html,
 body,
 #root {
@@ -11,94 +23,133 @@ body,
   margin: 0;
 }
 
-/* Article body — override prose colors with Kumo semantic tokens so dark mode works */
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------------------------------------------------------------------------
+ * Article body — reading typography, serif, centered measure
+ * ------------------------------------------------------------------------- */
 .article-body {
-  font-family: Georgia, "Times New Roman", serif;
-  color: var(--color-kumo-default);
-  font-size: 1rem;
-  line-height: 1.75;
+  font-family: Georgia, "Iowan Old Style", "Times New Roman", "Songti SC", "Noto Serif SC", serif;
+  font-size: 1.0625rem;
+  line-height: 1.85;
+  color: var(--color-ink);
+  word-break: break-word;
+}
+
+.article-body p {
+  margin: 0 0 1.25em;
 }
 
 .article-body h1,
 .article-body h2,
 .article-body h3,
 .article-body h4 {
-  color: var(--color-kumo-strong);
   font-weight: 600;
-  margin-top: 1.75em;
-  margin-bottom: 0.5em;
-  line-height: 1.3;
+  line-height: 1.35;
+  margin: 2em 0 0.6em;
 }
 
-.article-body h1 { font-size: 1.5rem; }
-.article-body h2 { font-size: 1.25rem; }
-.article-body h3 { font-size: 1.1rem; }
-
-.article-body p {
-  margin-top: 0;
-  margin-bottom: 1.25em;
+.article-body h1 {
+  font-size: 1.5rem;
+}
+.article-body h2 {
+  font-size: 1.3rem;
+}
+.article-body h3 {
+  font-size: 1.125rem;
 }
 
 .article-body a {
-  color: var(--color-kumo-brand);
+  color: var(--color-accent);
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 
-.article-body a:hover {
-  opacity: 0.8;
+.article-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 1.5em 0;
 }
 
-.article-body code {
-  font-size: 0.875em;
-  background: var(--color-kumo-recessed);
-  color: var(--color-kumo-strong);
-  padding: 0.15em 0.35em;
-  border-radius: 4px;
+.article-body blockquote {
+  margin: 1.5em 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--color-line);
+  color: var(--color-ink-2);
 }
 
 .article-body pre {
-  background: var(--color-kumo-recessed);
-  border: 1px solid var(--color-kumo-line);
-  border-radius: 6px;
-  padding: 1rem;
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 1em;
   overflow-x: auto;
-  margin-bottom: 1.25em;
+  font-size: 0.85em;
+  line-height: 1.6;
+}
+
+.article-body code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.875em;
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
 }
 
 .article-body pre code {
   background: none;
+  border: none;
   padding: 0;
-  font-size: 0.875rem;
-  line-height: 1.6;
-}
-
-.article-body blockquote {
-  border-left: 3px solid var(--color-kumo-line);
-  padding-left: 1rem;
-  color: var(--color-kumo-dimmed);
-  margin: 1.25em 0;
-  font-style: italic;
 }
 
 .article-body ul,
 .article-body ol {
+  margin: 0 0 1.25em;
   padding-left: 1.5em;
-  margin-bottom: 1.25em;
+}
+
+.article-body ul {
+  list-style: disc;
+}
+.article-body ol {
+  list-style: decimal;
 }
 
 .article-body li {
   margin-bottom: 0.4em;
 }
 
-.article-body img {
-  max-width: 100%;
-  border-radius: 6px;
-  margin: 1em 0;
-}
-
 .article-body hr {
   border: none;
-  border-top: 1px solid var(--color-kumo-line);
+  border-top: 1px solid var(--color-line);
   margin: 2em 0;
+}
+
+.article-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5em 0;
+  font-size: 0.9em;
+}
+
+.article-body th,
+.article-body td {
+  border: 1px solid var(--color-line);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+
+/* Thin scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
 }

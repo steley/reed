@@ -1,141 +1,153 @@
-import { Sidebar } from "@cloudflare/kumo";
-import {
-  RssIcon,
-  ArrowsClockwiseIcon,
-  GithubLogoIcon,
-  MoonIcon,
-  SunIcon,
-  PlusIcon,
-} from "@phosphor-icons/react";
 import type { Feed } from "@cloud-reader/types";
+import { avatarColor, feedDisplayName } from "../lib/display.ts";
+import { Moon, Plus, RssLogo, Sun, Trash } from "./icons.tsx";
 
-interface FeedSidebarProps {
+interface Props {
   feeds: Feed[];
   selectedFeedId: string | null;
   unreadCounts: Record<string, number>;
+  totalUnread: number;
   isDark: boolean;
-  isRefreshingAll: boolean;
-  onSelectFeed: (id: string | null) => void;
-  onRefreshAll: () => void;
-  onAddFeed: () => void;
-  onToggleDark: () => void;
+  open: boolean; // mobile drawer state; always visible on desktop
+  onSelectFeed(id: string | null): void;
+  onAddFeed(): void;
+  onToggleDark(): void;
+  onDeleteFeed(id: string): void;
+  onClose(): void; // close mobile drawer
+}
+
+function Avatar({ seed }: { seed: string }) {
+  const { bg, fg } = avatarColor(seed);
+  const name = feedDisplayName({ title: seed, url: "" });
+  return (
+    <span
+      className="flex size-5 shrink-0 items-center justify-center rounded text-[10px] font-bold"
+      style={{ backgroundColor: bg, color: fg }}
+      aria-hidden
+    >
+      {name.charAt(0).toUpperCase()}
+    </span>
+  );
 }
 
 export function FeedSidebar({
   feeds,
   selectedFeedId,
   unreadCounts,
+  totalUnread,
   isDark,
-  isRefreshingAll,
+  open,
   onSelectFeed,
-  onRefreshAll,
   onAddFeed,
   onToggleDark,
-}: FeedSidebarProps) {
+  onDeleteFeed,
+  onClose,
+}: Props) {
   return (
-    <Sidebar>
-      <Sidebar.Header className="py-2">
-        <RssIcon
-          weight="bold"
-          className="text-kumo-brand group-data-[state=collapsed]/sidebar:hidden"
-          size={20}
-        />
-        <span className="font-semibold text-kumo-strong group-data-[state=collapsed]/sidebar:hidden">
-          cloud-reader
-        </span>
-        <Sidebar.Trigger className="ml-auto" />
-      </Sidebar.Header>
+    <>
+      {/* Mobile scrim */}
+      {open && (
+        <div className="fixed inset-0 z-30 bg-black/30 md:hidden" onClick={onClose} aria-hidden />
+      )}
 
-      <Sidebar.Content>
-        <Sidebar.Group>
-          <Sidebar.GroupContent>
-            <Sidebar.Menu>
-              <Sidebar.MenuItem>
-                <Sidebar.MenuButton
-                  icon={<RssIcon />}
-                  active={selectedFeedId === null}
-                  onClick={() => onSelectFeed(null)}
-                >
-                  All articles
-                </Sidebar.MenuButton>
-                <Sidebar.MenuAction
-                  title="Refresh all feeds"
-                  onClick={onRefreshAll}
-                  disabled={isRefreshingAll}
-                >
-                  <ArrowsClockwiseIcon className={isRefreshingAll ? "animate-spin" : ""} />
-                </Sidebar.MenuAction>
-              </Sidebar.MenuItem>
-            </Sidebar.Menu>
-          </Sidebar.GroupContent>
-        </Sidebar.Group>
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col border-r border-line bg-panel transition-transform duration-200 md:static md:translate-x-0 ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {/* Wordmark */}
+        <div className="flex items-center gap-2 px-5 pb-4 pt-5">
+          <RssLogo className="text-accent" width={18} height={18} />
+          <span className="text-[15px] font-semibold tracking-tight">cloud-reader</span>
+        </div>
 
-        <Sidebar.Separator />
+        <nav className="min-h-0 flex-1 overflow-y-auto px-3">
+          {/* All articles */}
+          <button
+            type="button"
+            onClick={() => onSelectFeed(null)}
+            className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+              selectedFeedId === null
+                ? "bg-card font-medium text-ink"
+                : "text-ink-2 hover:bg-card/60 hover:text-ink"
+            }`}
+          >
+            <span>All articles</span>
+            {totalUnread > 0 && (
+              <span className="text-xs font-medium text-accent tabular-nums">{totalUnread}</span>
+            )}
+          </button>
 
-        <Sidebar.Group>
-          <Sidebar.GroupLabel>Feeds</Sidebar.GroupLabel>
-          <Sidebar.GroupContent>
-            <ul className="flex flex-col gap-0.5 px-2">
-              {feeds.map((feed) => {
-                const unread = unreadCounts[feed.id] ?? 0;
-                const isActive = selectedFeedId === feed.id;
-                return (
-                  <li key={feed.id}>
+          <div className="px-3 pb-1 pt-5 text-[11px] font-medium tracking-widest text-ink-3 uppercase">
+            Feeds
+          </div>
+
+          <ul className="space-y-0.5">
+            {feeds.map((feed) => {
+              const selected = feed.id === selectedFeedId;
+              const unread = unreadCounts[feed.id] ?? 0;
+              const name = feedDisplayName(feed);
+              return (
+                <li key={feed.id}>
+                  <div
+                    className={`group flex items-center rounded-lg pr-1.5 transition-colors ${
+                      selected ? "bg-card" : "hover:bg-card/60"
+                    }`}
+                  >
                     <button
                       type="button"
                       onClick={() => onSelectFeed(feed.id)}
-                      className={[
-                        "flex w-full items-start gap-2.5 rounded-md px-2 py-2.5 text-left text-sm transition-colors",
-                        isActive
-                          ? "bg-kumo-tint font-medium text-kumo-strong"
-                          : "text-kumo-default hover:bg-kumo-tint",
-                      ].join(" ")}
+                      className={`flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-left text-sm ${
+                        selected ? "text-ink" : "text-ink-2 hover:text-ink"
+                      }`}
                     >
-                      {unread > 0 ? (
-                        <span className="mt-0.5 min-w-[1.25rem] shrink-0 text-center text-xs font-semibold leading-none text-kumo-brand">
-                          {unread}
-                        </span>
-                      ) : (
-                        <span className="min-w-[1.25rem] shrink-0" />
-                      )}
-                      <span className="leading-snug">{feed.title ?? feed.url}</span>
+                      <Avatar seed={feed.title ?? feed.url} />
+                      <span className="truncate">{name}</span>
                     </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </Sidebar.GroupContent>
-        </Sidebar.Group>
-      </Sidebar.Content>
+                    {unread > 0 ? (
+                      <span className="min-w-4 text-right text-xs font-medium text-accent tabular-nums">
+                        {unread}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      aria-label={`Delete ${name}`}
+                      onClick={() => {
+                        if (window.confirm(`Delete "${name}" and all its articles?`)) {
+                          onDeleteFeed(feed.id);
+                        }
+                      }}
+                      className="ml-1 hidden rounded p-1 text-ink-3 hover:text-accent group-hover:block"
+                    >
+                      <Trash width={13} height={13} />
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
 
-      <Sidebar.Footer>
-        <Sidebar.Menu>
-          <Sidebar.MenuItem>
-            <Sidebar.MenuButton icon={<PlusIcon />} onClick={onAddFeed}>
-              Add feed
-            </Sidebar.MenuButton>
-          </Sidebar.MenuItem>
-          <Sidebar.MenuItem>
-            <Sidebar.MenuButton icon={isDark ? <SunIcon /> : <MoonIcon />} onClick={onToggleDark}>
-              {isDark ? "Light mode" : "Dark mode"}
-            </Sidebar.MenuButton>
-          </Sidebar.MenuItem>
-          <Sidebar.MenuItem>
-            <Sidebar.MenuButton
-              icon={<GithubLogoIcon />}
-              onClick={() =>
-                window.open(
-                  "https://github.com/acviana/cloud-reader",
-                  "_blank",
-                  "noopener,noreferrer",
-                )
-              }
-            >
-              Source code
-            </Sidebar.MenuButton>
-          </Sidebar.MenuItem>
-        </Sidebar.Menu>
-      </Sidebar.Footer>
-    </Sidebar>
+        {/* Footer actions */}
+        <div className="border-t border-line px-3 py-3">
+          <button
+            type="button"
+            onClick={onAddFeed}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-ink-2 transition-colors hover:bg-card/60 hover:text-ink"
+          >
+            <Plus width={15} height={15} />
+            Add feed
+          </button>
+          <button
+            type="button"
+            onClick={onToggleDark}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-ink-2 transition-colors hover:bg-card/60 hover:text-ink"
+          >
+            {isDark ? <Sun width={15} height={15} /> : <Moon width={15} height={15} />}
+            {isDark ? "Light mode" : "Dark mode"}
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }

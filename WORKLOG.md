@@ -787,3 +787,47 @@ refresh (sspai: +10 articles), article listing.
   rail exactly (32px in 32px content width), visible and clickable.
   Verified via Playwright: same row as title, right-aligned, collapse +
   re-expand cycle works.
+
+---
+
+## Frontend rewrite: Reeder-style minimal UI (drop Kumo)
+**Date:** 2026-10-10
+**Status:** Complete — verified locally against production API via static+proxy preview
+
+### Why
+The Kumo-based UI had polluted list cards (raw HN metadata in summaries), raw
+URLs in the sidebar for untitled feeds, a fixed 3-pane layout that wasted 2/3
+of the screen on an empty reader pane, no visible error state for failing
+feeds, and a generic default look. User chose a full frontend rewrite over
+incremental fixes (option A: Reeder-like minimal).
+
+### What was built
+- `app.css` rewritten: semantic tokens via Tailwind v4 `@theme inline` +
+  CSS `light-dark()` (canvas/panel/card/line/ink/ink-2/ink-3/accent), warm
+  paper palette, hand-styled `.article-body` (serif, 65ch measure).
+- `lib/display.ts`: `cleanSummary()` (strips HTML + HN metadata blocks),
+  `relativeTime()`, `feedDisplayName()` (hostname fallback), deterministic
+  letter-avatar colors, theme persistence (localStorage).
+- `components/icons.tsx`: inline SVG icon set (replaces @phosphor-icons).
+- `FeedSidebar` (mobile drawer + scrim, letter avatars, hover-delete),
+  `ArticleList` (clean cards: title/clean summary/source/relative time/unread
+  dot, accent selection bar, sort + refresh in header), `ArticleReader`
+  (centered 65ch, toolbar: mark-unread / original), `AddFeedDialog`
+  (hand-rolled modal), `App` (mobile list/reader swap, no Kumo Sidebar).
+- Removed deps: `@cloudflare/kumo`, `@phosphor-icons/react`,
+  `@tailwindcss/typography`, `zod`. Bundle: 525 KB → 254 KB (gzip 163 → 80 KB).
+- Local preview trick: single Node server serving `packages/app/dist` with
+  `/api/*` forwarded to production — screenshot-verified all states with real
+  data before deploying.
+
+### Deferred
+- Full-content fetching (readability) — sspai-style summary-only feeds still
+  show a stub in the reader (phase 2; linkedom is the candidate, pure JS).
+- Feed-level error surfacing (failing feeds look idle today; needs a schema
+  column + API field).
+
+### Gotchas
+- `@theme inline` + `light-dark()` is the only dark-mode mechanism; adding
+  `dark:` classes would be a style regression.
+- Port 8787 on this machine is held by an unrelated long-running node process —
+  the local preview trick (static + proxy in one server) avoids it entirely.

@@ -36,7 +36,7 @@ A self-hosted RSS reader with:
 - A REST API backend (Hono on Node) served from Vercel serverless functions
 - A Turso (libSQL/SQLite) database for feeds and articles, accessed via `@libsql/client` over HTTP
 - Hourly feed refresh via GitHub Actions (`schedule` cron)
-- A React frontend (Vite + Kumo component library) served as static output by Vercel
+- A React frontend (Vite + Tailwind v4, hand-rolled components) served as static output by Vercel
 - A CLI tool for terminal access to the API (phase 3)
 
 This is a **personal, single-user application**. There is no multi-tenancy, no
@@ -69,7 +69,7 @@ cloud-reader/
 |---------|-------------|
 | `@cloud-reader/types` | Shared `Feed`, `Article`, `NewFeed`, `NewArticle` TypeScript interfaces. No runtime code — types only. Imported by worker, app, and cli. |
 | `@cloud-reader/worker` | Owns the REST API (Hono), Turso/libsql queries via Drizzle, RSS fetching/parsing, and the refresh scripts (`scripts/refresh.ts` for Actions, `scripts/dev.ts` for local dev). |
-| `@cloud-reader/app` | React SPA built with Vite. Uses `@cloudflare/kumo` component library. Built to `dist/` and served as static output by Vercel. |
+| `@cloud-reader/app` | React SPA built with Vite. Hand-rolled components + Tailwind v4. Built to `dist/` and served as static output by Vercel. |
 | `@cloud-reader/cli` | Node.js CLI binary. Makes HTTP calls to the deployed REST API. Phase 3 — not yet scaffolded. |
 
 ---
@@ -84,11 +84,11 @@ cloud-reader/
 | HTTP router | Hono | Lightweight, typed routing; `app.request()` enables clean unit tests; `hono/vercel` adapter for the serverless entry |
 | RSS parsing | `fast-xml-parser` | Pure JS, no native deps, handles RSS 2.0 + Atom |
 | Markdown rendering | `marked` | Converts markdown content to HTML for feeds that provide markdown bodies |
-| Frontend | React 19 + Vite | Standard SPA setup, good Kumo compatibility |
-| UI components | `@cloudflare/kumo` | Component library, built on Base UI, Tailwind v4 |
+| Frontend | React 19 + Vite | Standard SPA setup |
+| UI components | Hand-rolled + Tailwind v4 | Reeder-style minimal UI; no component library (removed 2026-10-10) |
 | Scheduled refresh | GitHub Actions cron | Free for public/private repos, full Node runtime, no Vercel Pro needed for hourly frequency |
 | Testing | Vitest | Fast, native ESM, works in Node with in-memory libsql |
-| Monorepo | pnpm workspaces | Strict dependency isolation, fast installs, consistent with Kumo and vega repos |
+| Monorepo | pnpm workspaces | Strict dependency isolation, fast installs |
 | Linter | Biome | Fast Rust-based linter + formatter, consistent with vega repo, single config at root |
 | Language | TypeScript (strict) | `strict: true` + `noUncheckedIndexedAccess` throughout |
 
@@ -210,20 +210,15 @@ repository secrets; locally they can be exported in the shell or set per-command
 
 ## Frontend Conventions
 
-- **Dark mode:** toggled via `document.documentElement.style.colorScheme`. Kumo uses CSS `light-dark()` internally so all tokens respond automatically. Never use `dark:` Tailwind prefixes. Default is **light mode** (`isDark` initialises to `false`) — does not follow OS preference.
-- **No app-wide custom theming:** Kumo owns its component colours via `light-dark()` and `--color-kumo-*` variables. Theming only the parts we own (article body, cards) while Kumo's chrome stays neutral looks fragmented. Stick to Kumo's light/dark toggle.
-- **Semantic tokens only:** use `bg-kumo-base`, `text-kumo-default` etc. Never raw Tailwind colors (`bg-blue-500`).
-- **All content panes must have `bg-kumo-base`:** the sidebar has its own background from Kumo; the article list and reader must explicitly set `bg-kumo-base` or they'll use the browser default and look wrong in dark mode. Note: `bg-kumo-surface` is a visibly different (elevated) color — do not use it for pane backgrounds, only for cards/dialogs that sit above the base layer.
-- **Article typography:** use the `.article-body` CSS class (defined in `app.css`) for rendered article content — NOT Tailwind's `prose` classes. `prose` doesn't use Kumo's CSS variables so colors break in dark mode. `.article-body` uses `var(--color-kumo-*)` directly.
-- **HTML entities in article cards:** use `DOMParser` to strip tags and decode all entities. Never manual regex replacement.
-- **Article content rendering:** `marked` converts markdown → HTML. Heuristic: if content contains HTML tags treat as HTML, otherwise parse as markdown.
-- **Sort order:** article list sorts client-side by `publishedAt ?? createdAt`. Default is newest-first.
+- **Design language:** Reeder-style minimal. Warm paper tones, one orange accent, serif article body. Design tokens are semantic CSS variables in `app.css` (`--color-canvas/panel/card/line/ink/ink-2/ink-3/accent`) defined with CSS `light-dark()` — use them as Tailwind utilities (`bg-canvas`, `text-ink-2`, `border-line`, `text-accent`). Never raw Tailwind palette colors (`bg-blue-500`).
+- **Dark mode:** toggled via `document.documentElement.style.colorScheme`; all tokens are `light-dark()` so they follow automatically. Never use `dark:` Tailwind prefixes. Persisted in localStorage key `cloud-reader-theme`; default light, does not follow OS preference.
+- **No component library:** Kumo was removed (2026-10-10). Components are hand-rolled in `src/components/`; icons are inline SVG in `components/icons.tsx`. Don't reintroduce a component library without discussion — bundle must stay lean (~250 KB raw).
+- **Article typography:** rendered content uses the `.article-body` class (defined in `app.css`) — serif stack, hand-styled elements. Do not use Tailwind `prose` classes.
+- **Summary cleaning:** list-card summaries go through `cleanSummary()` in `lib/display.ts` (strips HTML + HN-style metadata blocks). Feed display names fall back to URL hostname via `feedDisplayName()` — never render a raw URL in the sidebar.
+- **Layout:** three panes — sidebar (w-64, mobile drawer with scrim), list (`md:w-[380px]`), reader (flex-1). On mobile the list and reader swap by `selectedArticle` state; no routing library.
+- **Article content rendering:** `marked` converts markdown → HTML, injected via `dangerouslySetInnerHTML`. 
+- **Sort order:** client-side by `publishedAt ?? createdAt`, toggleable newest/oldest. Default newest-first.
 - **Auto-mark-read:** selecting an article marks it read automatically.
-- **Refresh layout:** refresh-all is a `Sidebar.MenuAction` on the "All articles" row. Per-feed refresh is a button in the `ArticleList` header, shown only when a single feed is selected. No refresh icons on individual sidebar feed rows.
-- **Sidebar width:** `defaultWidth={280}`, `minWidth={220}`, `resizable`. Do not reduce these without good reason — feed titles need space.
-- **Kumo styling depends on the Tailwind `@source` scan** (`app.css` line 1). The path is relative to the CSS file: from `packages/app/src/` it must be `../node_modules/@cloudflare/kumo/dist/**` — `../../` points at the nonexistent `packages/node_modules` and **fails silently** (no error, Kumo utilities just vanish from the built CSS: unstyled `MenuAction`, `Empty` as plain text, etc.). Sanity check: `grep -c "bg-kumo-overlay" packages/app/dist/assets/*.css` must be ≥ 1.
-- **`Sidebar.Header` is itself `flex items-center gap-2` with built-in `px-2` and `overflow-hidden`.** The header row holds RSS icon + title + `Sidebar.Trigger className="ml-auto"` (trigger right-aligned on the same row as the title — deliberate, don't stack it into a second row). Icon and title carry `group-data-[state=collapsed]/sidebar:hidden` so the 32px trigger fits the 3rem rail alone when collapsed; don't add nested horizontal padding on header children or the trigger gets clipped in collapsed mode.
-- **Kumo `Empty` renders as a bordered card with `w-full`** — wrap it in a padded, width-capped container (`p-4`/`p-6` + `max-w-*`) or it spans the full pane edge-to-edge.
 
 ## General Conventions
 
@@ -315,7 +310,7 @@ pnpm --filter @cloud-reader/worker db:export-d1   # then: turso db shell <db> < 
 | Phase | Status | Description |
 |-------|--------|-------------|
 | 1 | Complete | API layer — Hono, Turso, REST endpoints, GH Actions refresh, Vitest |
-| 2 | Complete | Frontend — React, Vite, Kumo, static hosting on Vercel |
+| 2 | Complete | Frontend — React, Vite, Tailwind v4 (Reeder-style rewrite 2026-10-10), static hosting on Vercel |
 | 3 | Deferred | Auth, CLI tool, FTS5 search, OPML import/export |
 
 See `WORKLOG.md` for increment-by-increment progress and decisions.

@@ -1,126 +1,98 @@
-import { Button, Empty } from "@cloudflare/kumo";
-import { ArticleIcon, ArrowSquareOutIcon, CheckIcon } from "@phosphor-icons/react";
-import { marked } from "marked";
 import type { Article, Feed } from "@cloud-reader/types";
+import { marked } from "marked";
+import { useMemo } from "react";
+import { feedDisplayName, fullDate } from "../lib/display.ts";
+import { ArrowLeft, External, MarkUnread } from "./icons.tsx";
 
-/**
- * Render article body content as HTML.
- * RSS feeds may provide HTML (content:encoded) or Markdown.
- * Heuristic: if the string contains HTML tags, treat as HTML; otherwise parse as Markdown.
- */
-function renderContent(raw: string): string {
-  const looksLikeHtml = /<[a-z][\s\S]*>/i.test(raw);
-  if (looksLikeHtml) return raw;
-  return marked.parse(raw, { async: false }) as string;
-}
+marked.setOptions({ async: false, gfm: true, breaks: false });
 
-interface ArticleReaderProps {
+interface Props {
   article: Article | null;
   feed: Feed | null;
-  onMarkRead: (id: string, read: boolean) => void;
+  onBack(): void; // mobile: return to list
+  onMarkRead(id: string, read: boolean): void;
 }
 
-export function ArticleReader({ article, feed, onMarkRead }: ArticleReaderProps) {
+export function ArticleReader({ article, feed, onBack, onMarkRead }: Props) {
+  const html = useMemo(() => {
+    if (!article) return "";
+    const raw = article.content ?? article.summary ?? "";
+    return marked.parse(raw, { async: false }) as string;
+  }, [article]);
+
   if (!article) {
     return (
-      <div className="flex h-full items-center justify-center p-6">
-        <div className="w-full max-w-lg">
-          <Empty
-            icon={<ArticleIcon size={32} />}
-            title="No article selected"
-            description="Select an article from the list to read it."
+      <div className="hidden h-full flex-col items-center justify-center gap-3 bg-canvas md:flex">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" className="text-line">
+          <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
+          <path
+            d="M8 9h8M8 13h8M8 17h5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
           />
-        </div>
+        </svg>
+        <p className="text-sm text-ink-3">Select an article to read</p>
       </div>
     );
   }
 
-  const isRead = article.read === 1;
+  const url = article.url;
 
   return (
-    <div className="flex h-full flex-col bg-kumo-base">
+    <div className="flex h-full min-w-0 flex-col bg-canvas">
       {/* Toolbar */}
-      <div className="flex items-center justify-end gap-2 border-b border-kumo-line bg-kumo-base px-6 py-3">
-        <Button
-          variant={isRead ? "ghost" : "secondary"}
-          size="sm"
-          icon={<CheckIcon />}
-          className="w-32"
-          onClick={() => onMarkRead(article.id, !isRead)}
+      <header className="flex items-center gap-1 px-3 py-2.5 md:px-4">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back to list"
+          className="-ml-1 rounded-lg p-1.5 text-ink-2 hover:bg-card hover:text-ink md:hidden"
         >
-          {isRead ? "Mark unread" : "Mark read"}
-        </Button>
-        {article.url && (
-          <Button
-            variant="ghost"
-            size="sm"
-            shape="square"
-            icon={<ArrowSquareOutIcon />}
-            aria-label="Open original article"
-            onClick={() => window.open(article.url, "_blank", "noopener,noreferrer")}
-          />
-        )}
-      </div>
+          <ArrowLeft width={17} height={17} />
+        </button>
+        <div className="flex-1" />
+        <button
+          type="button"
+          onClick={() => onMarkRead(article.id, false)}
+          title="Mark as unread"
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] text-ink-2 transition-colors hover:bg-card hover:text-ink"
+        >
+          <MarkUnread width={14} height={14} />
+          <span className="hidden sm:inline">Mark unread</span>
+        </button>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          title="Open original"
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] text-ink-2 transition-colors hover:bg-card hover:text-ink"
+        >
+          <External width={14} height={14} />
+          <span className="hidden sm:inline">Original</span>
+        </a>
+      </header>
 
-      {/* Scrollable content area */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl px-8 py-10">
-          {/* Article header */}
-          <header className="mb-6">
-            <h1 className="mb-3 text-3xl font-bold leading-tight tracking-tight">
-              {article.url ? (
-                <a
-                  href={article.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-kumo-strong hover:text-kumo-brand hover:underline"
-                >
-                  {article.title ?? "Untitled"}
-                </a>
-              ) : (
-                <span className="text-kumo-strong">{article.title ?? "Untitled"}</span>
-              )}
-            </h1>
-            <div className="flex items-center gap-2 text-sm text-kumo-dimmed">
-              {feed && <span className="font-medium">{feed.title ?? feed.url}</span>}
-              {feed && article.publishedAt && <span aria-hidden>·</span>}
-              {article.publishedAt && (
-                <span>
-                  {new Date(article.publishedAt).toLocaleDateString(undefined, {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </span>
-              )}
-            </div>
-          </header>
-          <hr className="mb-8 border-kumo-line" />
-
-          {/* Article body */}
-          {article.content ? (
-            <div
-              className="article-body"
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: article content from trusted RSS feeds
-              dangerouslySetInnerHTML={{ __html: renderContent(article.content) }}
-            />
-          ) : article.summary ? (
-            <div
-              className="article-body"
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: article summary from trusted RSS feeds
-              dangerouslySetInnerHTML={{ __html: renderContent(article.summary) }}
-            />
-          ) : (
-            <div className="flex items-center justify-center py-16">
-              <Empty
-                icon={<ArticleIcon size={32} />}
-                title="No content available"
-                description="This feed doesn't include full article content."
-              />
-            </div>
-          )}
+      {/* Article */}
+      <article className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-[680px] px-6 pb-24 pt-4 md:px-8">
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-ink md:text-[30px]">
+            {article.title ?? "(untitled)"}
+          </h1>
+          <p className="mt-3 flex items-center gap-2 text-[13px] text-ink-2">
+            {feed && (
+              <>
+                <span className="font-medium">{feedDisplayName(feed)}</span>
+                <span aria-hidden>·</span>
+              </>
+            )}
+            <span>{fullDate(article.publishedAt)}</span>
+          </p>
+          <hr className="my-7 border-line" />
+          {/* biome-ignore lint/security/noDangerouslySetInnerHtml: HTML comes from our own marked-parsing of fetched feeds */}
+          <div className="article-body" dangerouslySetInnerHTML={{ __html: html }} />
         </div>
-      </div>
+      </article>
     </div>
   );
 }

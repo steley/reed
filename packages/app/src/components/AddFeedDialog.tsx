@@ -1,94 +1,98 @@
-import { useState } from "react";
-import { Button, Dialog, Field, Input } from "@cloudflare/kumo";
-import { XIcon } from "@phosphor-icons/react";
-import { ApiError } from "../lib/api.ts";
+import { useEffect, useRef, useState } from "react";
+import { X } from "./icons.tsx";
 
-interface AddFeedDialogProps {
+interface Props {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onAdd: (url: string) => Promise<void>;
+  onOpenChange(open: boolean): void;
+  onAdd(url: string): Promise<void>; // throws on failure
 }
 
-export function AddFeedDialog({ open, onOpenChange, onAdd }: AddFeedDialogProps) {
+export function AddFeedDialog({ open, onOpenChange, onAdd }: Props) {
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    if (open) {
+      setUrl("");
+      setError(null);
+      setSubmitting(false);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = url.trim();
-    if (!trimmed) return;
-
+    if (!/^https?:\/\/\S+\.\S+/.test(trimmed)) {
+      setError("Enter a valid http(s) URL");
+      return;
+    }
+    setSubmitting(true);
     setError(null);
-    setLoading(true);
     try {
       await onAdd(trimmed);
-      setUrl("");
       onOpenChange(false);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        setError("This feed URL is already in your list.");
-      } else {
-        setError(err instanceof Error ? err.message : "Failed to add feed.");
-      }
+      setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
-  }
-
-  function handleClose() {
-    setUrl("");
-    setError(null);
-    onOpenChange(false);
-  }
+  };
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog size="sm">
-        <div className="mb-6 flex items-start justify-between gap-4">
-          <Dialog.Title className="text-xl font-semibold text-kumo-strong">Add feed</Dialog.Title>
-          <Dialog.Close
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-[18vh]">
+      <div className="absolute inset-0" onClick={() => onOpenChange(false)} aria-hidden />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Add feed"
+        className="relative w-full max-w-md rounded-2xl border border-line bg-canvas p-6 shadow-xl"
+      >
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-[15px] font-semibold tracking-tight">Add feed</h2>
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
             aria-label="Close"
-            render={(props) => (
-              <Button
-                {...props}
-                className={props.className ?? ""}
-                variant="secondary"
-                shape="square"
-                size="sm"
-                icon={<XIcon />}
-                aria-label="Close"
-                onClick={handleClose}
-              />
-            )}
-          />
+            className="rounded-lg p-1.5 text-ink-3 hover:bg-card hover:text-ink"
+          >
+            <X width={15} height={15} />
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <Field
-            label="Feed URL"
-            {...(error ? { error: { message: error, match: "customError" as const } } : {})}
-          >
-            <Input
-              type="url"
-              placeholder="https://example.com/feed.xml"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              autoFocus
-              required
-            />
-          </Field>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" type="button" onClick={handleClose}>
+        <form onSubmit={submit}>
+          <input
+            ref={inputRef}
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://example.com/feed.xml"
+            spellCheck={false}
+            autoComplete="off"
+            className="w-full rounded-lg border border-line bg-panel px-3.5 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
+          />
+          {error && <p className="mt-2 text-[13px] text-accent">{error}</p>}
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="rounded-lg px-3.5 py-2 text-[13px] font-medium text-ink-2 transition-colors hover:bg-card hover:text-ink"
+            >
               Cancel
-            </Button>
-            <Button variant="primary" type="submit" loading={loading}>
-              Add feed
-            </Button>
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-lg bg-accent px-3.5 py-2 text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {submitting ? "Adding…" : "Add"}
+            </button>
           </div>
         </form>
-      </Dialog>
-    </Dialog.Root>
+      </div>
+    </div>
   );
 }
