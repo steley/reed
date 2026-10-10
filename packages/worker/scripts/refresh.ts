@@ -5,6 +5,6 @@
 import { getDb } from "../src/db/client.ts";
 import { runCron } from "../src/worker/cron.ts";
 
-const db = getDb();
+const db = await getDb();
 await runCron(db);
 console.log("Feed refresh finished.");

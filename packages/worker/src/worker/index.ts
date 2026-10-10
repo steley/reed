@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { sql } from "drizzle-orm";
 import type { DB } from "../db/client.ts";
 import { getDb } from "../db/client.ts";
 import { feedsRouter } from "./routes/feeds.ts";
@@ -19,13 +20,38 @@ export type Variables = {
 export function createApp(dbOverride?: DB) {
   const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-  // Inject db into context — allows tests to pass in a test db
+  // Inject db into context — allows tests to pass in a test db.
+  // getDb() failure is swallowed here: /api/health reports the real reason,
+  // other routes fail through onError.
   app.use("*", async (c, next) => {
-    c.set("db", dbOverride ?? getDb());
+    if (dbOverride) {
+      c.set("db", dbOverride);
+    } else {
+      try {
+        c.set("db", await getDb());
+      } catch {
+        // leave db unset — onError / health handle it
+      }
+    }
     await next();
   });
 
-  app.get("/api/health", (c) => c.json({ status: "ok" }));
+  // Real health check: verifies the database connection, not just the process.
+  app.get("/api/health", async (c) => {
+    try {
+      const db = await getDb();
+      await db.run(sql`SELECT 1`);
+      return c.json({ status: "ok", db: "connected" });
+    } catch (err) {
+      return c.json(
+        { status: "degraded", db: err instanceof Error ? err.message : String(err) },
+        503,
+      );
+    }
+  });
+
+  app.onError((err, c) => c.json({ error: err.message }, 500));
+
   app.route("/api/feeds", feedsRouter);
   app.route("/api/articles", articlesRouter);
   app.notFound((c) => c.json({ error: "Not found" }, 404));
