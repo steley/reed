@@ -1,5 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
-import type { ParsedArticle, ParsedFeed, ParsedFeedMeta } from "@cloud-reader/types";
+import type { ParsedArticle, ParsedFeed, ParsedFeedMeta } from "@reed/types";
 
 const parser = new XMLParser({
   ignoreAttributes: false,

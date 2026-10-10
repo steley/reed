@@ -9,7 +9,7 @@ patchedDependencies:
     hash: p5hajjofxq2oj7px42vnjaj7cu
     path: patches/@libsql__hrana-client@0.9.0.patch
   '@libsql/isomorphic-ws@0.1.5':
-    hash: 2e3qpijat6m3r2ctautuw53rwq
+    hash: 5fqvq3v2mytthypou7kkzyrque
     path: patches/@libsql__isomorphic-ws@0.1.5.patch
   drizzle-orm@0.41.0:
     hash: qofbqifwcy4ocxbfnqds7hyske
@@ -37,7 +37,7 @@ importers:
 
   packages/app:
     dependencies:
-      '@cloud-reader/types':
+      '@reed/types':
         specifier: workspace:*
         version: link:../types
       '@tailwindcss/vite':
@@ -80,12 +80,12 @@ importers:
 
   packages/worker:
     dependencies:
-      '@cloud-reader/types':
-        specifier: workspace:*
-        version: link:../types
       '@libsql/client':
         specifier: ^0.17.2
         version: 0.17.2
+      '@reed/types':
+        specifier: workspace:*
+        version: link:../types
       drizzle-orm:
         specifier: ^0.41.0
         version: 0.41.0(patch_hash=qofbqifwcy4ocxbfnqds7hyske)(@cloudflare/workers-types@4.20260317.1)(@libsql/client@0.17.2)(gel@2.2.0)
@@ -2490,7 +2490,7 @@ snapshots:
 
   '@libsql/hrana-client@0.9.0(patch_hash=p5hajjofxq2oj7px42vnjaj7cu)':
     dependencies:
-      '@libsql/isomorphic-ws': 0.1.5(patch_hash=2e3qpijat6m3r2ctautuw53rwq)
+      '@libsql/isomorphic-ws': 0.1.5(patch_hash=5fqvq3v2mytthypou7kkzyrque)
       cross-fetch: 4.1.0
       js-base64: 3.7.8
       node-fetch: 3.3.2
@@ -2499,7 +2499,7 @@ snapshots:
       - encoding
       - utf-8-validate
 
-  '@libsql/isomorphic-ws@0.1.5(patch_hash=2e3qpijat6m3r2ctautuw53rwq)':
+  '@libsql/isomorphic-ws@0.1.5(patch_hash=5fqvq3v2mytthypou7kkzyrque)':
     dependencies:
       '@types/ws': 8.18.1
       ws: 8.18.0

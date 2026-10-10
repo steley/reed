@@ -1,4 +1,4 @@
-import type { Article, Feed } from "@cloud-reader/types";
+import type { Article, Feed } from "@reed/types";
 import { marked } from "marked";
 import { useMemo } from "react";
 import { feedDisplayName, fullDate } from "../lib/display.ts";

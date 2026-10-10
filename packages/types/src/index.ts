@@ -1,5 +1,5 @@
 /**
- * Canonical types for cloud-reader.
+ * Canonical types for reed.
  * All packages (worker, app, cli) import from here.
  * Never redefine these inline.
  */

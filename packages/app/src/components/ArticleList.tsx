@@ -1,4 +1,4 @@
-import type { Article, Feed } from "@cloud-reader/types";
+import type { Article, Feed } from "@reed/types";
 import { cleanSummary, feedDisplayName, isUnread, relativeTime } from "../lib/display.ts";
 import { Menu, Refresh, Sort } from "./icons.tsx";
 

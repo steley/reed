@@ -1,4 +1,4 @@
-# cloud-reader
+# Reed
 
 A personal RSS reader built on Vercel (Hono), Turso (libSQL/SQLite), and GitHub Actions — static assets and API in one deployment, scheduled refresh in CI.
 
@@ -39,13 +39,13 @@ A personal RSS reader built on Vercel (Hono), Turso (libSQL/SQLite), and GitHub 
 ## Project structure
 
 ```
-cloud-reader/
+reed/
 ├── api/            # Vercel serverless entry (Hono via hono/vercel)
 ├── .github/        # workflows/refresh.yml — hourly feed refresh
 ├── packages/
-│   ├── types/      # @cloud-reader/types  — shared TypeScript types
-│   ├── worker/     # @cloud-reader/worker — REST API + Turso + refresh scripts
-│   └── app/        # @cloud-reader/app    — React SPA
+│   ├── types/      # @reed/types  — shared TypeScript types
+│   ├── worker/     # @reed/worker — REST API + Turso + refresh scripts
+│   └── app/        # @reed/app    — React SPA
 ├── vercel.json     # Build config + SPA fallback
 ├── AGENTS.md       # Architecture reference for agents and contributors
 └── WORKLOG.md      # Decision log for every increment
@@ -75,13 +75,13 @@ All responses are JSON. Errors return `{ error: string }`.
 pnpm install
 
 # Initialise a local SQLite file DB with the schema (one-time)
-TURSO_DATABASE_URL=file:local.db pnpm --filter @cloud-reader/worker db:local
+TURSO_DATABASE_URL=file:local.db pnpm --filter @reed/worker db:local
 
 # Run the API locally on :8787
 TURSO_DATABASE_URL=file:local.db pnpm dev
 
 # Run the frontend dev server (proxies /api/* to :8787)
-pnpm --filter @cloud-reader/app dev
+pnpm --filter @reed/app dev
 
 # Run all tests
 pnpm test:run
@@ -107,7 +107,7 @@ Schema migrations are applied directly to Turso:
 ```bash
 export TURSO_DATABASE_URL=libsql://...
 export TURSO_AUTH_TOKEN=...
-pnpm --filter @cloud-reader/worker db:migrate
+pnpm --filter @reed/worker db:migrate
 ```
 
 The hourly refresh workflow (`.github/workflows/refresh.yml`) needs the
@@ -119,8 +119,8 @@ The hourly refresh workflow (`.github/workflows/refresh.yml`) needs the
 
 ```bash
 # Edit packages/worker/src/db/schema.ts, then:
-pnpm --filter @cloud-reader/worker db:generate   # generates SQL in drizzle/
-pnpm --filter @cloud-reader/worker db:migrate    # apply to Turso (TURSO_* env vars)
+pnpm --filter @reed/worker db:generate   # generates SQL in drizzle/
+pnpm --filter @reed/worker db:migrate    # apply to Turso (TURSO_* env vars)
 ```
 
 ---

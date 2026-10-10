@@ -1,4 +1,4 @@
-# cloud-reader — Agent Guide
+# Reed — Agent Guide
 
 Personal RSS reader built on Vercel (Hono API), Turso (libSQL/SQLite), and
 GitHub Actions for scheduled feed refresh. This document is the authoritative
@@ -47,7 +47,7 @@ per-user auth in phase 1.
 ## Monorepo Structure
 
 ```
-cloud-reader/
+reed/
 ├── package.json              # Root: pnpm workspace config + root scripts
 ├── pnpm-workspace.yaml       # Declares packages/*
 ├── tsconfig.json             # Root: base TS config, extended by all packages
@@ -57,20 +57,20 @@ cloud-reader/
 ├── AGENTS.md                 # This file
 ├── WORKLOG.md                # Increment-by-increment build log (agent memory)
 └── packages/
-    ├── types/                # @cloud-reader/types  — shared TS types
-    ├── worker/               # @cloud-reader/worker — Hono API + Turso + refresh scripts
-    ├── app/                  # @cloud-reader/app    — React frontend (phase 2)
-    └── cli/                  # @cloud-reader/cli    — CLI tool (phase 3)
+    ├── types/                # @reed/types  — shared TS types
+    ├── worker/               # @reed/worker — Hono API + Turso + refresh scripts
+    ├── app/                  # @reed/app    — React frontend (phase 2)
+    └── cli/                  # @reed/cli    — CLI tool (phase 3)
 ```
 
 ### Package purposes
 
 | Package | Description |
 |---------|-------------|
-| `@cloud-reader/types` | Shared `Feed`, `Article`, `NewFeed`, `NewArticle` TypeScript interfaces. No runtime code — types only. Imported by worker, app, and cli. |
-| `@cloud-reader/worker` | Owns the REST API (Hono), Turso/libsql queries via Drizzle, RSS fetching/parsing, and the refresh scripts (`scripts/refresh.ts` for Actions, `scripts/dev.ts` for local dev). |
-| `@cloud-reader/app` | React SPA built with Vite. Hand-rolled components + Tailwind v4. Built to `dist/` and served as static output by Vercel. |
-| `@cloud-reader/cli` | Node.js CLI binary. Makes HTTP calls to the deployed REST API. Phase 3 — not yet scaffolded. |
+| `@reed/types` | Shared `Feed`, `Article`, `NewFeed`, `NewArticle` TypeScript interfaces. No runtime code — types only. Imported by worker, app, and cli. |
+| `@reed/worker` | Owns the REST API (Hono), Turso/libsql queries via Drizzle, RSS fetching/parsing, and the refresh scripts (`scripts/refresh.ts` for Actions, `scripts/dev.ts` for local dev). |
+| `@reed/app` | React SPA built with Vite. Hand-rolled components + Tailwind v4. Built to `dist/` and served as static output by Vercel. |
+| `@reed/cli` | Node.js CLI binary. Makes HTTP calls to the deployed REST API. Phase 3 — not yet scaffolded. |
 
 ---
 
@@ -125,7 +125,7 @@ Routes are defined with full paths (`/api/feeds`) so no basePath juggling is
 needed. A rewrite sends all non-`/api` paths to `/index.html` (SPA fallback).
 
 ### Shared types package
-`@cloud-reader/types` contains the canonical `Feed` and `Article` interfaces.
+`@reed/types` contains the canonical `Feed` and `Article` interfaces.
 All packages import from here. Never define these types inline in worker or app code.
 
 ### Drizzle migrations
@@ -190,7 +190,7 @@ All error responses: `{ error: string }` with appropriate HTTP status.
 
 `.github/workflows/refresh.yml` runs hourly (`0 * * * *`, plus manual
 `workflow_dispatch`). It checks out the repo, installs pnpm deps, and runs
-`pnpm --filter @cloud-reader/worker refresh` (→ `scripts/refresh.ts`), which
+`pnpm --filter @reed/worker refresh` (→ `scripts/refresh.ts`), which
 calls `runCron()` — `refreshFeed()` for every feed in Turso, using
 `Promise.allSettled` so one failing feed does not abort others.
 
@@ -211,7 +211,7 @@ repository secrets; locally they can be exported in the shell or set per-command
 ## Frontend Conventions
 
 - **Design language:** Reeder-style minimal. Warm paper tones, one orange accent, serif article body. Design tokens are semantic CSS variables in `app.css` (`--color-canvas/panel/card/line/ink/ink-2/ink-3/accent`) defined with CSS `light-dark()` — use them as Tailwind utilities (`bg-canvas`, `text-ink-2`, `border-line`, `text-accent`). Never raw Tailwind palette colors (`bg-blue-500`).
-- **Dark mode:** toggled via `document.documentElement.style.colorScheme`; all tokens are `light-dark()` so they follow automatically. Never use `dark:` Tailwind prefixes. Persisted in localStorage key `cloud-reader-theme`; default light, does not follow OS preference.
+- **Dark mode:** toggled via `document.documentElement.style.colorScheme`; all tokens are `light-dark()` so they follow automatically. Never use `dark:` Tailwind prefixes. Persisted in localStorage key `reed-theme`; default light, does not follow OS preference.
 - **No component library:** Kumo was removed (2026-10-10). Components are hand-rolled in `src/components/`; icons are inline SVG in `components/icons.tsx`. Don't reintroduce a component library without discussion — bundle must stay lean (~250 KB raw).
 - **Article typography:** rendered content uses the `.article-body` class (defined in `app.css`) — serif stack, hand-styled elements. Do not use Tailwind `prose` classes.
 - **Summary cleaning:** list-card summaries go through `cleanSummary()` in `lib/display.ts` (strips HTML + HN-style metadata blocks). Feed display names fall back to URL hostname via `feedDisplayName()` — never render a raw URL in the sidebar.
@@ -225,7 +225,7 @@ repository secrets; locally they can be exported in the shell or set per-command
 - **Exports:** named exports only, no default exports except in `vite.config.ts`
 - **File naming:** `kebab-case.ts`, test files colocated as `foo.test.ts`
 - **Error handling:** API endpoints return `{ error: string }` JSON, never throw to the client
-- **Types:** always import from `@cloud-reader/types`, never redefine inline
+- **Types:** always import from `@reed/types`, never redefine inline
 - **SQL:** Drizzle query builder for all queries, raw `sql` template tag only when necessary
 - **IDs:** always `crypto.randomUUID()`
 - **Timestamps:** always Unix milliseconds (`Date.now()`), stored as `integer`
@@ -261,7 +261,7 @@ pnpm install
 pnpm dev
 
 # Initialise a local SQLite file DB with the schema (one-time)
-TURSO_DATABASE_URL=file:local.db pnpm --filter @cloud-reader/worker db:local
+TURSO_DATABASE_URL=file:local.db pnpm --filter @reed/worker db:local
 
 # Run all tests
 pnpm test
@@ -279,19 +279,19 @@ pnpm build
 pnpm deploy
 
 # Generate Drizzle migration from schema changes
-pnpm --filter @cloud-reader/worker db:generate
+pnpm --filter @reed/worker db:generate
 
 # Apply migrations to Turso (reads TURSO_* env vars)
-pnpm --filter @cloud-reader/worker db:migrate
+pnpm --filter @reed/worker db:migrate
 
 # Trigger the hourly refresh manually (same code the Actions workflow runs)
-pnpm --filter @cloud-reader/worker refresh
+pnpm --filter @reed/worker refresh
 
 # Open Drizzle Studio (DB browser, uses TURSO_* env vars)
-pnpm --filter @cloud-reader/worker db:studio
+pnpm --filter @reed/worker db:studio
 
 # One-time D1 → Turso data migration helper (kept until data is migrated)
-pnpm --filter @cloud-reader/worker db:export-d1   # then: turso db shell <db> < dump.sql
+pnpm --filter @reed/worker db:export-d1   # then: turso db shell <db> < dump.sql
 ```
 
 ---
@@ -303,7 +303,7 @@ pnpm --filter @cloud-reader/worker db:export-d1   # then: turso db shell <db> < 
   drives the build), then set `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` env vars
   and bind a custom domain
 - **Deploys:** automatic on push to the production branch, or `pnpm deploy` (vercel CLI)
-- **Local dev:** `pnpm dev` (Node API on :8787 + `pnpm --filter @cloud-reader/app dev`)
+- **Local dev:** `pnpm dev` (Node API on :8787 + `pnpm --filter @reed/app dev`)
 
 ## Phase Roadmap
 

@@ -1,5 +1,5 @@
 {
-  "name": "@cloud-reader/worker",
+  "name": "@reed/worker",
   "version": "0.0.1",
   "private": true,
   "description": "REST API (Hono) + Turso/libsql database + cron refresh scripts",
@@ -16,7 +16,7 @@
     "db:local": "tsx scripts/local-db.ts"
   },
   "dependencies": {
-    "@cloud-reader/types": "workspace:*",
+    "@reed/types": "workspace:*",
     "@libsql/client": "^0.17.2",
     "drizzle-orm": "^0.41.0",
     "fast-xml-parser": "^4.5.3",

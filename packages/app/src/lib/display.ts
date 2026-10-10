@@ -1,4 +1,4 @@
-import type { Article } from "@cloud-reader/types";
+import type { Article } from "@reed/types";
 
 /**
  * Clean a raw feed summary for display in list cards.

@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "pnpm install",
-  "buildCommand": "pnpm --filter @cloud-reader/app build",
+  "buildCommand": "pnpm --filter @reed/app build",
   "outputDirectory": "packages/app/dist",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },

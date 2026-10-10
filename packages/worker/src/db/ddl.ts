@@ -1,5 +1,5 @@
 /**
- * Canonical CREATE statements for the cloud-reader schema. Single source of
+ * Canonical CREATE statements for the reed schema. Single source of
  * truth for: test databases (:memory:), local file DBs (scripts/local-db.ts),
  * and as a readable reference alongside the drizzle migrations in ./drizzle.
  */

@@ -1,4 +1,4 @@
-import type { Article, Feed, NewFeed, RefreshResult, UpdateArticle } from "@cloud-reader/types";
+import type { Article, Feed, NewFeed, RefreshResult, UpdateArticle } from "@reed/types";
 
 /**
  * Base URL for API requests.

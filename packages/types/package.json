@@ -1,8 +1,8 @@
 {
-  "name": "@cloud-reader/types",
+  "name": "@reed/types",
   "version": "0.0.1",
   "private": true,
-  "description": "Shared TypeScript types for cloud-reader",
+  "description": "Shared TypeScript types for reed",
   "type": "module",
   "exports": {
     ".": {

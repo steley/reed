@@ -1,4 +1,4 @@
-# cloud-reader — Worklog
+# Reed — Worklog
 
 Agent memory bank. Each increment is logged here with what was built, decisions
 made, options discarded, and any dead ends. Read this before starting any new
@@ -831,3 +831,42 @@ incremental fixes (option A: Reeder-like minimal).
   `dark:` classes would be a style regression.
 - Port 8787 on this machine is held by an unrelated long-running node process —
   the local preview trick (static + proxy in one server) avoids it entirely.
+
+---
+
+## Increment — Rename cloud-reader → Reed
+**Date:** 2026-10-10
+**Status:** Code complete — dependency reinstall + pre-commit checks pending on user's machine
+
+### Why
+User disliked the original name. "Light RSS" was proposed and rejected: "Light"
+is a generic prefix and sells the architecture (lightweight) instead of the
+experience. Chose **Reed** — reads as "RSS + read", short, brandable, and the
+future CLI binary (`reed`) gets a clean command name. Alternatives considered:
+Skim (skim-reading), River (Dave Winer's "River of News"), Drift.
+
+### What was done
+- Package scope `@cloud-reader/*` → `@reed/*` everywhere: root/worker/app/types
+  `package.json`, `vercel.json` buildCommand, `refresh.yml` filter, all imports.
+- Brand display: sidebar title + `index.html` `<title>` → "Reed"; README and
+  AGENTS.md headers → "Reed".
+- localStorage theme key `cloud-reader-theme` → `reed-theme` (one-time theme
+  reset for the single user; acceptable).
+- Descriptive comments in worker scripts, `ddl.ts`, types, and libsql patches
+  updated; WORKLOG historical entries intentionally left as-is (they describe
+  past reality, incl. the old workers.dev URL).
+
+### Not done here (manual / user machine)
+- GitHub repo rename (steley/cloud-reader → steley/reed) + `git remote set-url`.
+- Local folder rename `~/Sites/cloud-reader` → `reed`.
+- Vercel project name (optional; custom domain unaffected).
+- `pnpm install` to regenerate the lockfile (still contains @cloud-reader
+  importer names; a successful install rewrites it automatically).
+- The sandbox blocked every pnpm install attempt (ERR_PNPM_CODEBUDDY_BROKER_DENY,
+  symlink ENOENT/EEXIST at random packages, even after full node_modules delete,
+  retry loop, and `--force`). User is running the install locally; lint,
+  type-check and tests must pass before committing.
+
+### Gotchas
+- Worklog header replacement had to run as a second pass because WORKLOG.md was
+  deliberately excluded from the global find/replace list.

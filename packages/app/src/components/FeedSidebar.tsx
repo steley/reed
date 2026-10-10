@@ -1,4 +1,4 @@
-import type { Feed } from "@cloud-reader/types";
+import type { Feed } from "@reed/types";
 import { avatarColor, feedDisplayName } from "../lib/display.ts";
 import { Moon, Plus, RssLogo, Sun, Trash } from "./icons.tsx";
 
@@ -58,7 +58,7 @@ export function FeedSidebar({
         {/* Wordmark */}
         <div className="flex items-center gap-2 px-5 pb-4 pt-5">
           <RssLogo className="text-accent" width={18} height={18} />
-          <span className="text-[15px] font-semibold tracking-tight">cloud-reader</span>
+          <span className="text-[15px] font-semibold tracking-tight">Reed</span>
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-3">

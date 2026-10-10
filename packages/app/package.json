@@ -1,8 +1,8 @@
 {
-  "name": "@cloud-reader/app",
+  "name": "@reed/app",
   "version": "0.0.1",
   "private": true,
-  "description": "cloud-reader React frontend",
+  "description": "reed React frontend",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,7 @@
     "test:run": "echo 'no tests in app package yet' && exit 0"
   },
   "dependencies": {
-    "@cloud-reader/types": "workspace:*",
+    "@reed/types": "workspace:*",
     "@tailwindcss/vite": "^4.2.2",
     "marked": "^17.0.5",
     "react": "^19.0.0",

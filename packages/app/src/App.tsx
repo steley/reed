@@ -1,4 +1,4 @@
-import type { Article, Feed } from "@cloud-reader/types";
+import type { Article, Feed } from "@reed/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AddFeedDialog } from "./components/AddFeedDialog.tsx";
 import { ArticleList } from "./components/ArticleList.tsx";
@@ -6,7 +6,7 @@ import { ArticleReader } from "./components/ArticleReader.tsx";
 import { FeedSidebar } from "./components/FeedSidebar.tsx";
 import { articlesApi, feedsApi } from "./lib/api.ts";
 
-const THEME_KEY = "cloud-reader-theme";
+const THEME_KEY = "reed-theme";
 
 export function App() {
   const [feeds, setFeeds] = useState<Feed[]>([]);

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import type { RefreshResult } from "@cloud-reader/types";
+import type { RefreshResult } from "@reed/types";
 import type { DB } from "../db/client.ts";
 import { articles, feeds } from "../db/schema.ts";
 import { parseFeed } from "./parse.ts";

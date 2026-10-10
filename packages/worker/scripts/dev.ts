@@ -24,5 +24,5 @@ const db = drizzle(client, { schema });
 const port = Number(process.env.PORT ?? 8787);
 
 serve({ fetch: createApp(db).fetch, port }, (info) => {
-  console.log(`cloud-reader API listening on http://localhost:${info.port} (db: ${url})`);
+  console.log(`reed API listening on http://localhost:${info.port} (db: ${url})`);
 });
