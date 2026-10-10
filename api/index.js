@@ -14460,7 +14460,13 @@ async function refreshFeed(feedId, db) {
   if (!feed) {
     throw new Error(`Feed not found: ${feedId}`);
   }
-  const response = await fetch(feed.url);
+  const response = await fetch(feed.url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
+    },
+    redirect: "follow"
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch feed ${feed.url}: ${response.status} ${response.statusText}`);
   }
