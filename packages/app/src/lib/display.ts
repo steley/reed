@@ -1,5 +1,3 @@
-import type { Article } from "@reed/types";
-
 /**
  * Clean a raw feed summary for display in list cards.
  * Strips HTML tags and HN-style metadata blocks ("Article URL: …
@@ -76,8 +74,4 @@ export function avatarColor(seed: string): { bg: string; fg: string } {
     bg: `oklch(0.88 0.06 ${hue})`,
     fg: `oklch(0.42 0.11 ${hue})`,
   };
-}
-
-export function isUnread(article: Article): boolean {
-  return article.read === 0;
 }

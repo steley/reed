@@ -17,7 +17,7 @@ export function ArticleReader({ article, feed, onBack, onMarkRead }: Props) {
   const html = useMemo(() => {
     if (!article) return "";
     const raw = article.content ?? article.summary ?? "";
-    return marked.parse(raw, { async: false }) as string;
+    return marked.parse(raw) as string;
   }, [article]);
 
   if (!article) {

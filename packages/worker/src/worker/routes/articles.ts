@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
 import { articles } from "../../db/schema.ts";
-import type { Env, Variables } from "../index.ts";
+import type { Variables } from "../index.ts";
 
-export const articlesRouter = new Hono<{ Bindings: Env; Variables: Variables }>();
+export const articlesRouter = new Hono<{ Variables: Variables }>();
 
 // GET /api/articles?feed_id=&unread=true
 articlesRouter.get("/", async (c) => {

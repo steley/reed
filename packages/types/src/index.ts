@@ -62,13 +62,6 @@ export interface RefreshResult {
   updated: number;
 }
 
-/**
- * Generic API error response
- */
-export interface ApiError {
-  error: string;
-}
-
 // ---------------------------------------------------------------------------
 // Parsed feed — internal shape returned by parse.ts
 // Not exposed in the API, but shared if the cli ever parses feeds locally.

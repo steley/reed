@@ -151,7 +151,10 @@ All packages import from here. Never define these types inline in worker or app 
 ### Drizzle migrations
 Schema changes go through `drizzle-kit generate` (produces SQL in `packages/worker/drizzle/`)
 then `drizzle-kit migrate` against Turso (`TURSO_*` env vars). Never manually
-edit generated migration files.
+edit generated migration files. Test databases (`test-helpers.ts`) and
+`scripts/local-db.ts` apply that same generated SQL via `src/db/ddl.ts` (a
+loader that concatenates all `drizzle/*.sql`) — the migrations are the only
+place the DDL lives; never hand-write schema SQL elsewhere.
 
 ### Dependency patches (`patches/`)
 pnpm `patchedDependencies` in the root `package.json` carries three

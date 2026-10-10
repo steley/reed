@@ -5,20 +5,13 @@ import { getDb } from "../db/client.ts";
 import { feedsRouter } from "./routes/feeds.ts";
 import { articlesRouter } from "./routes/articles.ts";
 
-/**
- * No platform bindings — the database is reached over HTTP (libsql web client)
- * and configured via environment variables (TURSO_DATABASE_URL,
- * TURSO_AUTH_TOKEN). Kept as Hono's Bindings type for route typing consistency.
- */
-export type Env = Record<string, string>;
-
 // Hono context variable: db is injected by middleware so routes are testable
 export type Variables = {
   db: DB;
 };
 
 export function createApp(dbOverride?: DB) {
-  const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+  const app = new Hono<{ Variables: Variables }>();
 
   // Inject db into context — allows tests/dev to pass in a db override.
   // getDb() failure is swallowed here: /api/health reports the real reason,

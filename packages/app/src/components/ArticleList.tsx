@@ -1,5 +1,5 @@
 import type { Article, Feed } from "@reed/types";
-import { cleanSummary, feedDisplayName, isUnread, relativeTime } from "../lib/display.ts";
+import { cleanSummary, feedDisplayName, relativeTime } from "../lib/display.ts";
 import { Menu, Refresh, Sort } from "./icons.tsx";
 
 interface Props {
@@ -82,7 +82,7 @@ export function ArticleList({
           <ul>
             {sorted.map((article) => {
               const selected = article.id === selectedArticleId;
-              const unread = isUnread(article);
+              const unread = article.read === 0;
               const feed = feedsById[article.feedId];
               const summary = cleanSummary(article.summary);
               return (

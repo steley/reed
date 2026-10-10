@@ -996,3 +996,53 @@ removed `api/[[...route]].ts` catch-all), and an unexplained `patches/` dir.
 - The husky wrapper runs hooks under `sh -e`, so a failed `pnpm build:api`
   aborts the commit on its own; the explicit `exit 1` covers the diff
   mismatch path.
+
+---
+
+## Increment — Ponytail audit: 9 over-engineering cuts
+**Date:** 2026-10-11
+**Status:** Complete
+
+### Why
+Whole-repo over-engineering audit (ponytail-audit) found ~75 lines of dead
+code, duplication, and speculative flexibility. Repo is otherwise lean; no
+dependencies flagged.
+
+### What was cut
+- `src/db/ddl.ts` — 34 lines of hand-written CREATE statements duplicated the
+  generated `drizzle/0000_*.sql`. Now a ~10-line loader that concatenates all
+  `drizzle/*.sql` (sorted), so the migrations are the single source of schema
+  truth. `executeMultiple` handles the `--> statement-breakpoint` comments
+  fine — all 45 tests pass against the migration-loaded schema.
+- `Env` type (`Record<string, string>`) in `worker/index.ts` — bindings never
+  read; the comment admitted it existed "for route typing consistency". All
+  three Hono generics are now `{ Variables: Variables }`.
+- App `ApiError` class — `.status` was never read anywhere; plain
+  `throw new Error(...)` now. The `ApiError` interface in `@reed/types` had
+  zero imports; deleted.
+- App.tsx articles-load `useEffect` re-implemented `reloadArticles` (declared
+  one block below); now calls it.
+- `isUnread()` helper — inlined as `article.read === 0` (App.tsx already
+  inlined it twice); unused `Article` type import dropped from display.ts.
+- `marked.parse(raw, { async: false })` — `async: false` already set via
+  module-level `setOptions`; per-call option dropped.
+- Stale api.ts header comment ("wrangler dev server" — Cloudflare-era
+  leftover) now describes the actual Vercel/scripts-dev.ts setup.
+- App package echo `test`/`test:run` scripts — `pnpm -r run test` silently
+  skips packages without the script, so the placeholders were scaffolding.
+
+### Decisions made
+- **Migration files as the only DDL:** drizzle-kit generates them anyway for
+  `db:migrate`; reading them in tests/local-db removes the drift risk instead
+  of managing two copies. Side benefit: resolves the earlier gotcha where
+  local.db had to be migrated "straight with sqlite3" — `db:local` now runs
+  the real migration SQL via the same loader.
+- **Deliberately NOT cut:** drizzle for this query size and the committed
+  `api/index.js` bundle (both settled decisions), the refresh N+1 select/insert
+  loop (boring beats clever for an upsert that must count added vs updated),
+  `totalUnread` via full-list fetch (perf, out of audit scope).
+
+### Gotchas
+- Moving the articles-load effect to use `reloadArticles` requires it to be
+  declared *before* the effect — biome's `noInvalidUseBeforeDeclaration` and
+  tsc both flag the hoisted reference.

@@ -30,17 +30,16 @@ export function App() {
     feedsApi.list().then(setFeeds).catch(console.error);
   }, []);
 
-  // Load articles when selected feed changes
-  useEffect(() => {
-    const opts = selectedFeedId ? { feedId: selectedFeedId } : undefined;
-    articlesApi.list(opts).then(setArticles).catch(console.error);
-    setSelectedArticleId(null);
-  }, [selectedFeedId]);
-
   const reloadArticles = useCallback(async (feedId: string | null) => {
     const opts = feedId ? { feedId } : undefined;
     setArticles(await articlesApi.list(opts));
   }, []);
+
+  // Load articles when selected feed changes
+  useEffect(() => {
+    reloadArticles(selectedFeedId).catch(console.error);
+    setSelectedArticleId(null);
+  }, [selectedFeedId, reloadArticles]);
 
   // Unread counts per feed (from the currently loaded list; total from all feeds)
   const unreadCounts = useMemo(() => {

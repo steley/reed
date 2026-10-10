@@ -2,8 +2,8 @@ import type { Article, Feed, NewFeed, RefreshResult, UpdateArticle } from "@reed
 
 /**
  * Base URL for API requests.
- * In production: same origin (worker serves both API and assets).
- * In local dev: Vite proxies /api/* to the wrangler dev server.
+ * In production: same origin (Vercel serves the API and the SPA from one project).
+ * In local dev: Vite proxies /api/* to scripts/dev.ts on :8787.
  */
 const BASE = "/api";
 
@@ -15,23 +15,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, (body as { error?: string }).error ?? res.statusText);
+    throw new Error((body as { error?: string }).error ?? res.statusText);
   }
 
   // 204 No Content — return undefined cast to T
   if (res.status === 204) return undefined as T;
 
   return res.json() as Promise<T>;
-}
-
-export class ApiError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "ApiError";
-  }
 }
 
 // ---------------------------------------------------------------------------

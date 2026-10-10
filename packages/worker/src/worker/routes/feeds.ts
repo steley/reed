@@ -2,9 +2,9 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { feeds } from "../../db/schema.ts";
 import { refreshFeed } from "../../lib/refresh.ts";
-import type { Env, Variables } from "../index.ts";
+import type { Variables } from "../index.ts";
 
-export const feedsRouter = new Hono<{ Bindings: Env; Variables: Variables }>();
+export const feedsRouter = new Hono<{ Variables: Variables }>();
 
 // GET /api/feeds
 feedsRouter.get("/", async (c) => {

@@ -7,9 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "type-check": "tsc --noEmit",
-    "test": "echo 'no tests in app package yet' && exit 0",
-    "test:run": "echo 'no tests in app package yet' && exit 0"
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@reed/types": "workspace:*",
