@@ -28,8 +28,7 @@
   "packageManager": "pnpm@9.15.9",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild",
-      "sharp"
+      "esbuild"
     ],
     "patchedDependencies": {
       "@libsql/isomorphic-ws@0.1.5": "patches/@libsql__isomorphic-ws@0.1.5.patch",
@@ -40,7 +39,6 @@
   "devDependencies": {
     "@biomejs/biome": "^2.4.9",
     "@types/node": "^22.13.0",
-    "hono": "^4.12.9",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "typescript": "^5.7.3"

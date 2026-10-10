@@ -25,9 +25,6 @@ importers:
       '@types/node':
         specifier: ^22.13.0
         version: 22.20.5
-      hono:
-        specifier: ^4.12.9
-        version: 4.12.9
       husky:
         specifier: ^9.1.7
         version: 9.1.7
