@@ -896,3 +896,21 @@ Skim (skim-reading), River (Dave Winer's "River of News"), Drift.
 First pass (fat plumes + 11px stems) read as matches; second pass slimmed
 stems to 8px, narrowed plumes and unified the lean — reads as reeds down to
 32px. Kept flat/no outlines, consistent with the hand-rolled Reeder-style UI.
+
+---
+
+## Increment — README homepage screenshot
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was done
+- Playwright headless Chromium shot the production homepage (1440×900 @2x,
+  light scheme, networkidle + 1.2s settle) → `docs/screenshot.png` (~264 KB).
+- Embedded under the README tagline. Per AGENTS.md rule 5 the URL used for
+  shooting lives outside git — the README image path is relative, no hostname
+  committed.
+
+### Gotchas
+- `docs/` didn't exist; created it. Screenshot contains the user's own feed
+  list (public HN/少数派 titles) — accepted by the user when requesting the
+  public-README embed; re-shoot if they ever add private feeds.

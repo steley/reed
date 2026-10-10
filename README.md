@@ -6,6 +6,8 @@
 
 A personal RSS reader built on Vercel (Hono), Turso (libSQL/SQLite), and GitHub Actions — static assets and API in one deployment, scheduled refresh in CI.
 
+![Reed — homepage](docs/screenshot.png)
+
 ---
 
 ## Features
