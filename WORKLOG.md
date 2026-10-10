@@ -1046,3 +1046,22 @@ dependencies flagged.
 - Moving the articles-load effect to use `reloadArticles` requires it to be
   declared *before* the effect — biome's `noInvalidUseBeforeDeclaration` and
   tsc both flag the hoisted reference.
+
+---
+
+## Increment — CI pnpm version conflict fix
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was built
+- Removed the explicit `version: 9` input from the `pnpm/action-setup@v4`
+  step in `.github/workflows/refresh.yml`. The action now reads
+  `packageManager: pnpm@9.15.9` from the root `package.json` automatically.
+
+### Gotchas
+- The Actions run was failing with `ERR_PNPM_BAD_PM_VERSION`: passing
+  `version` to `pnpm/action-setup` while `packageManager` is set in
+  package.json is a hard error in v4 of the action, not a warning. Rule of
+  thumb: one source of truth for the pnpm version — the `packageManager`
+  field. When bumping pnpm, only `package.json` changes; workflows need
+  nothing.
