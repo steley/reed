@@ -4,6 +4,17 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@libsql/hrana-client@0.9.0':
+    hash: p5hajjofxq2oj7px42vnjaj7cu
+    path: patches/@libsql__hrana-client@0.9.0.patch
+  '@libsql/isomorphic-ws@0.1.5':
+    hash: 2e3qpijat6m3r2ctautuw53rwq
+    path: patches/@libsql__isomorphic-ws@0.1.5.patch
+  drizzle-orm@0.41.0:
+    hash: qofbqifwcy4ocxbfnqds7hyske
+    path: patches/drizzle-orm@0.41.0.patch
+
 importers:
 
   .:
@@ -92,7 +103,7 @@ importers:
         version: 0.17.2
       drizzle-orm:
         specifier: ^0.41.0
-        version: 0.41.0(@cloudflare/workers-types@4.20260317.1)(@libsql/client@0.17.2)(gel@2.2.0)
+        version: 0.41.0(patch_hash=qofbqifwcy4ocxbfnqds7hyske)(@cloudflare/workers-types@4.20260317.1)(@libsql/client@0.17.2)(gel@2.2.0)
       fast-xml-parser:
         specifier: ^4.5.3
         version: 4.5.5
@@ -3484,7 +3495,7 @@ snapshots:
   '@libsql/client@0.17.2':
     dependencies:
       '@libsql/core': 0.17.2
-      '@libsql/hrana-client': 0.9.0
+      '@libsql/hrana-client': 0.9.0(patch_hash=p5hajjofxq2oj7px42vnjaj7cu)
       js-base64: 3.7.8
       libsql: 0.5.29
       promise-limit: 2.7.0
@@ -3503,9 +3514,9 @@ snapshots:
   '@libsql/darwin-x64@0.5.29':
     optional: true
 
-  '@libsql/hrana-client@0.9.0':
+  '@libsql/hrana-client@0.9.0(patch_hash=p5hajjofxq2oj7px42vnjaj7cu)':
     dependencies:
-      '@libsql/isomorphic-ws': 0.1.5
+      '@libsql/isomorphic-ws': 0.1.5(patch_hash=2e3qpijat6m3r2ctautuw53rwq)
       cross-fetch: 4.1.0
       js-base64: 3.7.8
       node-fetch: 3.3.2
@@ -3514,7 +3525,7 @@ snapshots:
       - encoding
       - utf-8-validate
 
-  '@libsql/isomorphic-ws@0.1.5':
+  '@libsql/isomorphic-ws@0.1.5(patch_hash=2e3qpijat6m3r2ctautuw53rwq)':
     dependencies:
       '@types/ws': 8.18.1
       ws: 8.18.0
@@ -3984,7 +3995,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.41.0(@cloudflare/workers-types@4.20260317.1)(@libsql/client@0.17.2)(gel@2.2.0):
+  drizzle-orm@0.41.0(patch_hash=qofbqifwcy4ocxbfnqds7hyske)(@cloudflare/workers-types@4.20260317.1)(@libsql/client@0.17.2)(gel@2.2.0):
     optionalDependencies:
       '@cloudflare/workers-types': 4.20260317.1
       '@libsql/client': 0.17.2

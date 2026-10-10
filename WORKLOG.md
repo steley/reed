@@ -653,3 +653,50 @@ Feeds with full article content in `content:encoded` encode all HTML as XML enti
    wrangler dep + `db:export-d1` script afterwards.
 4. Import repo in Vercel, set env vars, bind domain; delete the CF Worker.
 5. Add the two secrets to GitHub repo; trigger `workflow_dispatch` once.
+
+---
+
+## Fix Vercel FUNCTION_INVOCATION_FAILED (CJS deps in esbuild-ESM bundle)
+**Date:** 2026-10-10
+**Status:** Complete (verified locally via esbuild bundle repro; awaiting redeploy)
+
+### Root cause
+`@libsql/client` (all entries, incl. `/web`) statically pulls:
+`@libsql/hrana-client/index.js` → `@libsql/isomorphic-ws` → `ws` (CJS), and
+`cross-fetch` → `node-fetch` (CJS). Under `@vercel/node`'s esbuild-ESM
+bundling, those CJS packages throw `Dynamic require of "stream"/"path" is not
+supported` at module load → every function invocation dies before our code
+runs (FUNCTION_INVOCATION_FAILED, even for /api/health).
+Additionally `drizzle-orm/libsql/driver.js` imports `@libsql/client` (Node
+entry → native libsql binding) at runtime even when a client is injected.
+
+### What was built
+- `src/db/client.ts`: static import of `@libsql/client/web` (pure JS HTTP);
+  sync `getDb()`; rejects `file:` URLs (dev-only path is scripts/dev.ts).
+- `scripts/dev.ts`: builds a Node client (supports `file:local.db`) and
+  injects it via `createApp(dbOverride)`.
+- pnpm patches (patches/ dir, registered in package.json):
+  - `@libsql/isomorphic-ws@0.1.5` — node entry uses `globalThis.WebSocket`,
+    drops `ws` import.
+  - `@libsql/hrana-client@0.9.0` — index.js/http/client.js/http/stream.js use
+    global `fetch/Request/Headers/WebSocket` instead of cross-fetch/isomorphic-ws.
+  - `drizzle-orm@0.41.0` — libsql/driver.js imports `@libsql/client/web`.
+- `/api/health` now pings `SELECT 1` and returns 503 + concrete DB error;
+  `app.onError` returns `{error}` JSON; TURSO_* env values are trimmed.
+- Local repro harness: esbuild bundle of `api/[[...route]].ts` + node run with
+  fake Turso creds — before patches: `Dynamic require of "stream"` crash
+  (matches production); after: graceful 503 JSON.
+
+### Decisions made
+- Patch polyfills instead of replacing the driver: Node 18+ has all globals
+  the patched code needs; ws:// transport is unused (HTTP-only via Turso).
+- Static web-client import instead of runtime branch: @vercel/node's file
+  tracer misses dynamic-import chunks; static pure-JS is the safest shape.
+
+### Dead ends / gotchas
+- Upstream has no fix as of @libsql/client@0.18.0 / hrana-client@0.10.0 —
+  static isomorphic-ws import is still there. Re-check when upgrading.
+- drizzle-orm/libsql pulls the Node client even for injected clients — patch
+  driver.js, or expect native-libsql crashes on serverless.
+- Local pnpm install repeatedly SIGKILLed in this environment while applying
+  patches (exit 137). Verify patch application on Vercel build logs.

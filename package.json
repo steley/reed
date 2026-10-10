@@ -29,13 +29,18 @@
     "onlyBuiltDependencies": [
       "esbuild",
       "sharp"
-    ]
+    ],
+    "patchedDependencies": {
+      "@libsql/isomorphic-ws@0.1.5": "patches/@libsql__isomorphic-ws@0.1.5.patch",
+      "@libsql/hrana-client@0.9.0": "patches/@libsql__hrana-client@0.9.0.patch",
+      "drizzle-orm@0.41.0": "patches/drizzle-orm@0.41.0.patch"
+    }
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.9",
     "@types/node": "^22.13.0",
-    "husky": "^9.1.7",
     "hono": "^4.12.9",
+    "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "typescript": "^5.7.3"
   }

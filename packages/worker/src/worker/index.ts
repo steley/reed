@@ -6,9 +6,9 @@ import { feedsRouter } from "./routes/feeds.ts";
 import { articlesRouter } from "./routes/articles.ts";
 
 /**
- * No platform bindings — the database is reached over HTTP (libsql client) and
- * configured via environment variables (TURSO_DATABASE_URL, TURSO_AUTH_TOKEN).
- * Kept as Hono's Bindings type for route typing consistency.
+ * No platform bindings — the database is reached over HTTP (libsql web client)
+ * and configured via environment variables (TURSO_DATABASE_URL,
+ * TURSO_AUTH_TOKEN). Kept as Hono's Bindings type for route typing consistency.
  */
 export type Env = Record<string, string>;
 
@@ -20,7 +20,7 @@ export type Variables = {
 export function createApp(dbOverride?: DB) {
   const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-  // Inject db into context — allows tests to pass in a test db.
+  // Inject db into context — allows tests/dev to pass in a db override.
   // getDb() failure is swallowed here: /api/health reports the real reason,
   // other routes fail through onError.
   app.use("*", async (c, next) => {
@@ -28,7 +28,7 @@ export function createApp(dbOverride?: DB) {
       c.set("db", dbOverride);
     } else {
       try {
-        c.set("db", await getDb());
+        c.set("db", getDb());
       } catch {
         // leave db unset — onError / health handle it
       }
@@ -39,7 +39,7 @@ export function createApp(dbOverride?: DB) {
   // Real health check: verifies the database connection, not just the process.
   app.get("/api/health", async (c) => {
     try {
-      const db = await getDb();
+      const db = getDb();
       await db.run(sql`SELECT 1`);
       return c.json({ status: "ok", db: "connected" });
     } catch (err) {
