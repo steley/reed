@@ -11,6 +11,9 @@ dist/
 *.db-shm
 *.db-wal
 
+# D1 data export (one-time migration dump)
+dump.sql
+
 # Environment
 .env
 .env.*
