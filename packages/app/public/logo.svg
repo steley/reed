@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Reed logo — three wind-swept reed stalks. Ink stems, ember plumes. -->
+  <defs>
+    <linearGradient id="plume" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#d9480f"/>
+      <stop offset="1" stop-color="#ff8a3d"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="#1f1d1a" stroke-width="8" stroke-linecap="round">
+    <path d="M124 436 C128 396 134 360 140 332"/>
+    <path d="M208 436 C204 352 206 264 208 196"/>
+    <path d="M290 436 C296 372 302 312 306 256"/>
+  </g>
+  <path d="M100 448 H412" fill="none" stroke="#b3afa7" stroke-width="7" stroke-linecap="round"/>
+  <g fill="url(#plume)">
+    <path d="M140 332 C136 306 144 280 170 260 C174 288 164 312 140 332 Z"/>
+    <path d="M208 200 C202 160 212 122 248 94 C254 136 238 170 208 200 Z"/>
+    <path d="M306 256 C300 224 310 194 342 172 C346 206 334 234 306 256 Z"/>
+  </g>
+</svg>

@@ -1,5 +1,9 @@
 # Reed
 
+<p>
+  <img src="packages/app/public/logo.svg" width="72" alt="Reed logo" />
+</p>
+
 A personal RSS reader built on Vercel (Hono), Turso (libSQL/SQLite), and GitHub Actions — static assets and API in one deployment, scheduled refresh in CI.
 
 ---

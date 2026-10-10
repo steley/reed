@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Reed favicon — warm paper tile, ink stems, ember plumes. Adapts to dark mode. -->
+  <defs>
+    <linearGradient id="plume" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#d9480f"/>
+      <stop offset="1" stop-color="#ff8a3d"/>
+    </linearGradient>
+    <linearGradient id="plume-dark" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#e8590f"/>
+      <stop offset="1" stop-color="#ffab70"/>
+    </linearGradient>
+  </defs>
+  <rect class="bg" x="0" y="0" width="512" height="512" rx="112" fill="#faf9f7"/>
+  <g class="stems" fill="none" stroke="#1f1d1a" stroke-width="8" stroke-linecap="round">
+    <path d="M140 420 C144 384 150 352 156 324"/>
+    <path d="M212 420 C208 344 210 264 212 204"/>
+    <path d="M292 420 C297 364 303 312 307 264"/>
+  </g>
+  <path class="ground" d="M112 432 H400" fill="none" stroke="#b3afa7" stroke-width="7" stroke-linecap="round"/>
+  <g class="plumes" fill="url(#plume)">
+    <path d="M156 328 C152 302 160 276 186 256 C190 284 180 308 156 328 Z"/>
+    <path d="M212 208 C206 168 216 130 252 102 C258 144 242 178 212 208 Z"/>
+    <path d="M307 268 C301 236 311 206 343 184 C347 218 335 246 307 268 Z"/>
+  </g>
+  <style>
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #121212; }
+      .stems { stroke: #e9e7e2; }
+      .ground { stroke: #6e6a64; }
+      .plumes { fill: url(#plume-dark); }
+    }
+  </style>
+</svg>

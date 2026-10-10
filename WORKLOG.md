@@ -870,3 +870,29 @@ Skim (skim-reading), River (Dave Winer's "River of News"), Drift.
 ### Gotchas
 - Worklog header replacement had to run as a second pass because WORKLOG.md was
   deliberately excluded from the global find/replace list.
+
+---
+
+## Increment — Logo + favicon
+**Date:** 2026-10-10
+**Status:** Complete
+
+### What was built
+- Hand-written SVG mark: three wind-swept reed stalks (ink stems, ember plumes
+  with a `#d9480f → #ff8a3d` gradient) matching the app's warm-paper palette.
+- `packages/app/public/logo.svg` — bare mark on transparent bg (README use).
+- `packages/app/public/favicon.svg` — rounded warm tile, embeds a
+  `prefers-color-scheme: dark` block (dark bg / light stems / lighter plume
+  gradient), so the favicon adapts in modern browsers.
+- `favicon.png` (32) + `apple-touch-icon.png` (180, full-bleed square) rendered
+  from the SVG via headless Chromium (Playwright, data-URI img — file://
+  subresources from `about:blank` pages are blocked, first attempt produced
+  broken-image PNGs).
+- `index.html`: svg+png favicon links, apple-touch-icon, light/dark
+  theme-color meta. README gets the logo under the H1.
+- Vite `public/` → `dist/` copy verified by build.
+
+### Design note
+First pass (fat plumes + 11px stems) read as matches; second pass slimmed
+stems to 8px, narrowed plumes and unified the lean — reads as reeds down to
+32px. Kept flat/no outlines, consistent with the hand-rolled Reeder-style UI.
