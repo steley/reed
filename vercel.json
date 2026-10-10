@@ -4,5 +4,8 @@
   "installCommand": "pnpm install",
   "buildCommand": "pnpm --filter @cloud-reader/app build",
   "outputDirectory": "packages/app/dist",
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
 }
