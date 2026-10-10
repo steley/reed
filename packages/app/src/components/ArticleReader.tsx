@@ -23,12 +23,14 @@ interface ArticleReaderProps {
 export function ArticleReader({ article, feed, onMarkRead }: ArticleReaderProps) {
   if (!article) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Empty
-          icon={<ArticleIcon size={32} />}
-          title="No article selected"
-          description="Select an article from the list to read it."
-        />
+      <div className="flex h-full items-center justify-center p-6">
+        <div className="w-full max-w-lg">
+          <Empty
+            icon={<ArticleIcon size={32} />}
+            title="No article selected"
+            description="Select an article from the list to read it."
+          />
+        </div>
       </div>
     );
   }

@@ -54,7 +54,7 @@ export function ArticleList({
         <header className="border-b border-kumo-line px-4 py-3">
           <h2 className="font-semibold text-kumo-strong">{title}</h2>
         </header>
-        <div className="flex flex-1 items-center justify-center">
+        <div className="flex flex-1 items-center justify-center p-4">
           <Empty
             icon={<ArticleIcon size={32} />}
             title="No articles"

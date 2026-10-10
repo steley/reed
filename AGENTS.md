@@ -221,6 +221,9 @@ repository secrets; locally they can be exported in the shell or set per-command
 - **Auto-mark-read:** selecting an article marks it read automatically.
 - **Refresh layout:** refresh-all is a `Sidebar.MenuAction` on the "All articles" row. Per-feed refresh is a button in the `ArticleList` header, shown only when a single feed is selected. No refresh icons on individual sidebar feed rows.
 - **Sidebar width:** `defaultWidth={280}`, `minWidth={220}`, `resizable`. Do not reduce these without good reason — feed titles need space.
+- **Kumo styling depends on the Tailwind `@source` scan** (`app.css` line 1). The path is relative to the CSS file: from `packages/app/src/` it must be `../node_modules/@cloudflare/kumo/dist/**` — `../../` points at the nonexistent `packages/node_modules` and **fails silently** (no error, Kumo utilities just vanish from the built CSS: unstyled `MenuAction`, `Empty` as plain text, etc.). Sanity check: `grep -c "bg-kumo-overlay" packages/app/dist/assets/*.css` must be ≥ 1.
+- **`Sidebar.Header` is itself `flex items-center gap-2`** — stacking multiple rows inside requires an explicit `className="flex-col ..."`. It also has built-in `px-2` and `overflow-hidden`: don't add nested horizontal padding on children, or content gets clipped when the sidebar collapses to 3rem (icon rail).
+- **Kumo `Empty` renders as a bordered card with `w-full`** — wrap it in a padded, width-capped container (`p-4`/`p-6` + `max-w-*`) or it spans the full pane edge-to-edge.
 
 ## General Conventions
 

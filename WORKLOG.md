@@ -700,3 +700,81 @@ entry → native libsql binding) at runtime even when a client is injected.
   driver.js, or expect native-libsql crashes on serverless.
 - Local pnpm install repeatedly SIGKILLed in this environment while applying
   patches (exit 137). Verify patch application on Vercel build logs.
+
+---
+
+## Increment — Sidebar UI fixes + Kumo Tailwind `@source` path bug
+**Date:** 2026-10-10
+**Status:** Complete (uncommitted)
+
+### What was built
+- `packages/app/src/app.css`: fixed `@source` path for Kumo scanning —
+  `../../node_modules/...` → `../node_modules/...`. From `packages/app/src/`,
+  `../../` resolves to `packages/node_modules` (doesn't exist), so Tailwind v4
+  was silently scanning nothing in Kumo's dist. Built CSS grew 32KB → 127KB.
+- `packages/app/src/components/FeedSidebar.tsx`:
+  - Moved `<Sidebar.Trigger />` from Footer to Header, right-aligned via
+    `ml-auto` next to the "cloud-reader" title.
+  - Title span hides when sidebar collapses:
+    `group-data-[state=collapsed]/sidebar:hidden` (Kumo idiom, prevents text
+    overflowing the 3rem icon rail).
+
+### Decisions made
+- No custom CSS for the refresh button: the misalignment was purely the
+  missing Tailwind classes. Kumo's `MenuAction` is already
+  `absolute right-1.5 top-1/2` — once `@source` works, it right-aligns onto
+  the "All articles" row by itself.
+
+### Dead ends / gotchas
+- **Tailwind v4 `@source` failures are silent** — wrong glob path just yields
+  missing utilities, no error/warning. Symptom in UI: `MenuAction` rendered
+  in normal flow below the button, left-aligned; any kumo-only class
+  (`bg-kumo-overlay`, `group-data-*`) absent from built CSS while app-source
+  classes were present. Verify with `grep -c "bg-kumo-overlay" dist/assets/*.css`.
+- Kumo ships zero structural CSS for Sidebar (`kumo.css` has no
+  `[data-sidebar]` rules) — everything depends on the Tailwind scan.
+
+### Correction (same increment, 22:35)
+- Trigger-in-header v1 was wrong: put on the same row as the title with
+  `ml-auto`. Two problems: (1) user wanted it *below* the title row,
+  right-aligned; (2) in collapsed 3rem mode the flex row overflowed
+  (icon 20 + gap 8 + trigger 26 > 32px content) and the trigger got clipped
+  → impossible to re-expand.
+- Final layout: Header row 1 = RSS icon + title, hidden entirely when
+  collapsed; row 2 = `<Sidebar.Trigger />` in `flex justify-end px-2 pb-2`.
+  Trigger survives collapse and stays reachable.
+
+---
+
+## Production debugging: three fixes to make reader.wesync.cn fully work
+**Date:** 2026-10-10
+**Status:** Complete — all API endpoints verified live
+
+1. **Pre-bundled function**: patches alone didn't stop FUNCTION_INVOCATION_FAILED
+   (@vercel/node pipeline still crashed at module load while the equivalent
+   local esbuild bundle ran). Shipped a committed self-contained CJS bundle
+   (`api/index.js`, regenerate via `pnpm build:api`; source is
+   `packages/worker/src/vercel-entry.ts`, biome excludes `api/**`).
+2. **Catch-all only matches one segment** under framework:null — multi-segment
+   paths 404'd at the edge (x-vercel-error: NOT_FOUND, function never invoked).
+   Fix: rewrite `{ "source": "/api/(.*)", "destination": "/api/index" }`.
+3. **Feeds 403'd without a UA**: refresh.ts now sends a browser UA + Accept.
+   Note: ruanyifeng.com blocks Vercel datacenter IPs outright (UA-independent).
+
+Verified live: health (db connected), create/list/delete feeds, per-feed
+refresh (sspai: +10 articles), article listing.
+
+### Correction 2 (22:40)
+- Root cause of "trigger still on title row": kumo `Sidebar.Header` is itself
+  `flex items-center gap-2` — my two row divs became side-by-side children.
+  Fix: `<Sidebar.Header className="flex-col items-stretch gap-1 py-2">`.
+- Collapsed clipping: header has built-in `px-2` + `overflow-hidden`; nested
+  `px-2` on the trigger row left only 16px for a 32px button in 3rem mode.
+  Fix: padding lives only on the Header, rows are padding-free.
+- Right panes were NOT broken — kumo `Empty` now renders its real card style
+  (was invisible pre-@source-fix). Added breathing room: list empty container
+  `p-4`; reader empty container `p-6` + `max-w-lg` wrapper so the card stops
+  spanning the full 900px pane edge-to-edge.
+- Verified via Playwright (1440x900): trigger right-aligned below title
+  (x=239..271 of 280), visible and clickable when collapsed, re-expand works
+  (width back to 280).

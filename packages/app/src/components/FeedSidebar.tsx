@@ -34,10 +34,13 @@ export function FeedSidebar({
 }: FeedSidebarProps) {
   return (
     <Sidebar>
-      <Sidebar.Header>
-        <div className="flex items-center gap-2 px-2 py-2">
+      <Sidebar.Header className="flex-col items-stretch gap-1 py-2">
+        <div className="flex items-center gap-2 px-2 group-data-[state=collapsed]/sidebar:hidden">
           <RssIcon weight="bold" className="text-kumo-brand" size={20} />
           <span className="font-semibold text-kumo-strong">cloud-reader</span>
+        </div>
+        <div className="flex justify-end">
+          <Sidebar.Trigger />
         </div>
       </Sidebar.Header>
 
@@ -130,7 +133,6 @@ export function FeedSidebar({
             </Sidebar.MenuButton>
           </Sidebar.MenuItem>
         </Sidebar.Menu>
-        <Sidebar.Trigger />
       </Sidebar.Footer>
     </Sidebar>
   );
