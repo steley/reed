@@ -1065,3 +1065,25 @@ dependencies flagged.
   thumb: one source of truth for the pnpm version — the `packageManager`
   field. When bumping pnpm, only `package.json` changes; workflows need
   nothing.
+
+---
+
+## Increment — Move refresh cron off the top of the hour
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was built
+- `refresh.yml` cron changed from `0 * * * *` to `37 * * * *`.
+
+### Decisions made
+- Only 2 of ~12 hourly slots actually fired after the workflow landed
+  (2026-10-10 19:11 → 2026-10-11 07:05), and the two that did were 21 and
+  31 minutes late. `0 * * * *` is GitHub's most congested cron slot — under
+  load, scheduled runs are delayed or silently dropped. `:37` avoids the
+  :00/:15/:30/:45 congestion; no official stats exist, so this is a
+  heuristic pick, and RSS tolerates the missed hours either way.
+- AGENTS.md refresh section updated to match.
+
+### Gotchas
+- Missed scheduled runs leave no trace in the Actions log — the run list
+  just shows gaps, nothing failed. Don't debug repo config for this.

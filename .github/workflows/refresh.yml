@@ -2,8 +2,8 @@ name: Refresh feeds
 
 on:
   schedule:
-    # Hourly. GitHub cron can be delayed by up to ~15 min — acceptable for RSS.
-    - cron: "0 * * * *"
+    # Hourly at :37 — GitHub drops/delays top-of-the-hour crons under load.
+    - cron: "37 * * * *"
   workflow_dispatch: {}
 
 jobs:

@@ -221,8 +221,9 @@ All error responses: `{ error: string }` with appropriate HTTP status.
 
 ## Feed Refresh (GitHub Actions)
 
-`.github/workflows/refresh.yml` runs hourly (`0 * * * *`, plus manual
-`workflow_dispatch`). It checks out the repo, installs pnpm deps, and runs
+`.github/workflows/refresh.yml` runs hourly (`37 * * * *`, plus manual
+`workflow_dispatch`; off the top of the hour because GitHub delays/drops
+on-the-hour crons under load). It checks out the repo, installs pnpm deps, and runs
 `pnpm --filter @reed/worker refresh` (→ `scripts/refresh.ts`), which
 calls `runCron()` — `refreshFeed()` for every feed in Turso, using
 `Promise.allSettled` so one failing feed does not abort others.
