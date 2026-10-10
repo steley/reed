@@ -1,16 +1,24 @@
-import type { Feed } from "@reed/types";
-import { avatarColor, feedDisplayName } from "../lib/display.ts";
-import { Moon, Plus, ReedMark, Sun, Trash } from "./icons.tsx";
+import { useEffect, useMemo, useState } from "react";
+import type { Feed, Folder } from "@reed/types";
+import { avatarColor, compareNames, feedDisplayName } from "../lib/display.ts";
+import { Folder as FolderIcon, FolderPlus, Moon, Plus, ReedMark, Sun, Trash } from "./icons.tsx";
 
 interface Props {
   feeds: Feed[];
+  folders: Folder[];
   selectedFeedId: string | null;
+  selectedFolderId: string | null;
   unreadCounts: Record<string, number>;
   totalUnread: number;
   isDark: boolean;
   open: boolean; // mobile drawer state; always visible on desktop
   onSelectFeed(id: string | null): void;
+  onSelectFolder(id: string | null): void;
   onAddFeed(): void;
+  onAddFolder(): void;
+  onRenameFolder(id: string): void;
+  onDeleteFolder(id: string): void;
+  onMoveFeed(feedId: string, folderId: string | null): void;
   onToggleDark(): void;
   onDeleteFeed(id: string): void;
   onClose(): void; // close mobile drawer
@@ -30,19 +38,154 @@ function Avatar({ seed }: { seed: string }) {
   );
 }
 
+/** Sidebar row for one feed. Draggable into a folder; drop zones live on folder rows. */
+function FeedRow({
+  feed,
+  name,
+  unread,
+  selected,
+  indented,
+  onSelect,
+  onDelete,
+}: {
+  feed: Feed;
+  name: string;
+  unread: number;
+  selected: boolean;
+  indented: boolean;
+  onSelect(): void;
+  onDelete(): void;
+}) {
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: native drag handle only; the interactive controls are the child buttons
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", feed.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
+      className={`group flex select-none items-center rounded-lg pr-1.5 transition-colors ${
+        indented ? "ml-6" : ""
+      } ${selected ? "bg-card" : "hover:bg-card/60"}`}
+    >
+      <button
+        type="button"
+        onClick={onSelect}
+        className={`flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-left text-sm ${
+          selected ? "text-ink" : "text-ink-2 hover:text-ink"
+        }`}
+      >
+        <Avatar seed={feed.title ?? feed.url} />
+        <span className="truncate">{name}</span>
+      </button>
+      {unread > 0 ? (
+        <span className="min-w-4 text-right text-xs font-medium text-accent tabular-nums">
+          {unread}
+        </span>
+      ) : null}
+      <button
+        type="button"
+        aria-label={`Delete ${name}`}
+        onClick={() => {
+          if (window.confirm(`Delete "${name}" and all its articles?`)) {
+            onDelete();
+          }
+        }}
+        className="ml-1 hidden rounded p-1 text-ink-3 hover:text-accent group-hover:block"
+      >
+        <Trash width={13} height={13} />
+      </button>
+    </div>
+  );
+}
+
+const UNCATEGORIZED = "__uncategorized__";
+
 export function FeedSidebar({
   feeds,
+  folders,
   selectedFeedId,
+  selectedFolderId,
   unreadCounts,
   totalUnread,
   isDark,
   open,
   onSelectFeed,
+  onSelectFolder,
   onAddFeed,
+  onAddFolder,
+  onRenameFolder,
+  onDeleteFolder,
+  onMoveFeed,
   onToggleDark,
   onDeleteFeed,
   onClose,
 }: Props) {
+  // Right-click context menu target: { folderId, viewport x/y } | null
+  const [menu, setMenu] = useState<{ folderId: string; x: number; y: number } | null>(null);
+  // Folder id (or UNCATEGORIZED) currently highlighted as a drop target
+  const [dragOver, setDragOver] = useState<string | null>(null);
+
+  // Auto-ascending order: folders and feeds both sort by display name
+  const sortedFolders = useMemo(
+    () => [...folders].sort((a, b) => compareNames(a.name, b.name)),
+    [folders],
+  );
+  const sortedFeeds = useMemo(
+    () => [...feeds].sort((a, b) => compareNames(feedDisplayName(a), feedDisplayName(b))),
+    [feeds],
+  );
+
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menu]);
+
+  const folderUnread = (folderId: string) =>
+    sortedFeeds
+      .filter((f) => f.folderId === folderId)
+      .reduce((sum, f) => sum + (unreadCounts[f.id] ?? 0), 0);
+
+  const dropHandlers = (target: string, folderId: string | null) => ({
+    onDragOver: (e: React.DragEvent) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      setDragOver(target);
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+        setDragOver((v) => (v === target ? null : v));
+      }
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(null);
+      const feedId = e.dataTransfer.getData("text/plain");
+      if (feedId) onMoveFeed(feedId, folderId);
+    },
+  });
+
+  const renderFeed = (feed: Feed, indented: boolean) => {
+    const name = feedDisplayName(feed);
+    return (
+      <li key={feed.id}>
+        <FeedRow
+          feed={feed}
+          name={name}
+          unread={unreadCounts[feed.id] ?? 0}
+          selected={feed.id === selectedFeedId}
+          indented={indented}
+          onSelect={() => onSelectFeed(feed.id)}
+          onDelete={() => onDeleteFeed(feed.id)}
+        />
+      </li>
+    );
+  };
+
   return (
     <>
       {/* Mobile scrim */}
@@ -67,7 +210,7 @@ export function FeedSidebar({
             type="button"
             onClick={() => onSelectFeed(null)}
             className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-              selectedFeedId === null
+              selectedFeedId === null && selectedFolderId === null
                 ? "bg-card font-medium text-ink"
                 : "text-ink-2 hover:bg-card/60 hover:text-ink"
             }`}
@@ -78,54 +221,74 @@ export function FeedSidebar({
             )}
           </button>
 
-          <div className="px-3 pb-1 pt-5 text-[11px] font-medium tracking-widest text-ink-3 uppercase">
-            Feeds
-          </div>
+          {/* Folders */}
+          {sortedFolders.length > 0 && (
+            <>
+              <div className="px-3 pb-1 pt-5 text-[11px] font-medium tracking-widest text-ink-3 uppercase">
+                Folders
+              </div>
+              <ul className="space-y-0.5">
+                {sortedFolders.map((folder) => {
+                  const selected = folder.id === selectedFolderId;
+                  const unread = folderUnread(folder.id);
+                  const highlighted = dragOver === folder.id;
+                  return (
+                    <li key={folder.id}>
+                      {/* biome-ignore lint/a11y/noStaticElementInteractions: context menu + drop target; click/keyboard live on the child button */}
+                      <div
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setMenu({ folderId: folder.id, x: e.clientX, y: e.clientY });
+                        }}
+                        {...dropHandlers(folder.id, folder.id)}
+                        className={`group flex select-none items-center rounded-lg pr-1.5 transition-colors ${
+                          highlighted
+                            ? "bg-card ring-1 ring-accent"
+                            : selected
+                              ? "bg-card"
+                              : "hover:bg-card/60"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => onSelectFolder(folder.id)}
+                          className={`flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-left text-sm ${
+                            selected ? "font-medium text-ink" : "text-ink-2 hover:text-ink"
+                          }`}
+                        >
+                          <FolderIcon width={14} height={14} className="shrink-0 text-ink-3" />
+                          <span className="truncate">{folder.name}</span>
+                        </button>
+                        {unread > 0 ? (
+                          <span className="min-w-4 text-right text-xs font-medium text-accent tabular-nums">
+                            {unread}
+                          </span>
+                        ) : null}
+                      </div>
+                      {sortedFeeds
+                        .filter((f) => f.folderId === folder.id)
+                        .map((feed) => renderFeed(feed, true))}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
 
-          <ul className="space-y-0.5">
-            {feeds.map((feed) => {
-              const selected = feed.id === selectedFeedId;
-              const unread = unreadCounts[feed.id] ?? 0;
-              const name = feedDisplayName(feed);
-              return (
-                <li key={feed.id}>
-                  <div
-                    className={`group flex items-center rounded-lg pr-1.5 transition-colors ${
-                      selected ? "bg-card" : "hover:bg-card/60"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onSelectFeed(feed.id)}
-                      className={`flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-left text-sm ${
-                        selected ? "text-ink" : "text-ink-2 hover:text-ink"
-                      }`}
-                    >
-                      <Avatar seed={feed.title ?? feed.url} />
-                      <span className="truncate">{name}</span>
-                    </button>
-                    {unread > 0 ? (
-                      <span className="min-w-4 text-right text-xs font-medium text-accent tabular-nums">
-                        {unread}
-                      </span>
-                    ) : null}
-                    <button
-                      type="button"
-                      aria-label={`Delete ${name}`}
-                      onClick={() => {
-                        if (window.confirm(`Delete "${name}" and all its articles?`)) {
-                          onDeleteFeed(feed.id);
-                        }
-                      }}
-                      className="ml-1 hidden rounded p-1 text-ink-3 hover:text-accent group-hover:block"
-                    >
-                      <Trash width={13} height={13} />
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          {/* Uncategorized feeds — drop target for moving a feed out of a folder */}
+          <div
+            {...dropHandlers(UNCATEGORIZED, null)}
+            className={`rounded-lg ${dragOver === UNCATEGORIZED ? "bg-card/50" : ""}`}
+          >
+            <div className="px-3 pb-1 pt-5 text-[11px] font-medium tracking-widest text-ink-3 uppercase">
+              Feeds
+            </div>
+            <ul className="space-y-0.5">
+              {sortedFeeds
+                .filter((f) => f.folderId === null)
+                .map((feed) => renderFeed(feed, false))}
+            </ul>
+          </div>
         </nav>
 
         {/* Footer actions */}
@@ -140,6 +303,14 @@ export function FeedSidebar({
           </button>
           <button
             type="button"
+            onClick={onAddFolder}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-ink-2 transition-colors hover:bg-card/60 hover:text-ink"
+          >
+            <FolderPlus width={15} height={15} />
+            New folder
+          </button>
+          <button
+            type="button"
             onClick={onToggleDark}
             className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-ink-2 transition-colors hover:bg-card/60 hover:text-ink"
           >
@@ -148,6 +319,63 @@ export function FeedSidebar({
           </button>
         </div>
       </aside>
+
+      {/* Folder context menu (outside <aside>: fixed positioning would be
+          contained by the aside's transform on mobile) */}
+      {menu && (
+        <>
+          <div
+            className="fixed inset-0 z-50"
+            onClick={() => setMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu(null);
+            }}
+            aria-hidden
+          />
+          <div
+            role="menu"
+            className="fixed z-50 min-w-32 rounded-lg border border-line bg-canvas py-1 shadow-xl"
+            style={{
+              left: Math.max(8, Math.min(menu.x, window.innerWidth - 150)),
+              top: Math.max(8, Math.min(menu.y, window.innerHeight - 90)),
+            }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                const { folderId } = menu;
+                setMenu(null);
+                onRenameFolder(folderId);
+              }}
+              className="block w-full px-3 py-1.5 text-left text-[13px] text-ink-2 hover:bg-card hover:text-ink"
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                const { folderId } = menu;
+                setMenu(null);
+                const folder = folders.find((f) => f.id === folderId);
+                if (
+                  folder &&
+                  window.confirm(
+                    `Delete folder "${folder.name}"? Feeds inside will not be deleted.`,
+                  )
+                ) {
+                  onDeleteFolder(folderId);
+                }
+              }}
+              className="block w-full px-3 py-1.5 text-left text-[13px] text-ink-2 hover:bg-card hover:text-accent"
+            >
+              Delete
+            </button>
+          </div>
+        </>
+      )}
     </>
   );
 }

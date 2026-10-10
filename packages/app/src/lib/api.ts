@@ -1,4 +1,14 @@
-import type { Article, Feed, NewFeed, RefreshResult, UpdateArticle } from "@reed/types";
+import type {
+  Article,
+  Feed,
+  Folder,
+  NewFeed,
+  NewFolder,
+  RefreshResult,
+  UpdateArticle,
+  UpdateFeed,
+  UpdateFolder,
+} from "@reed/types";
 
 /**
  * Base URL for API requests.
@@ -47,6 +57,41 @@ export const feedsApi = {
   refresh(id: string): Promise<RefreshResult> {
     return request<RefreshResult>(`/feeds/${id}/refresh`, { method: "POST" });
   },
+
+  update(id: string, data: UpdateFeed): Promise<Feed> {
+    return request<Feed>(`/feeds/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Folders
+// ---------------------------------------------------------------------------
+
+export const foldersApi = {
+  list(): Promise<Folder[]> {
+    return request<Folder[]>("/folders");
+  },
+
+  create(data: NewFolder): Promise<Folder> {
+    return request<Folder>("/folders", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  rename(id: string, data: UpdateFolder): Promise<Folder> {
+    return request<Folder>(`/folders/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete(id: string): Promise<void> {
+    return request<void>(`/folders/${id}`, { method: "DELETE" });
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -54,9 +99,10 @@ export const feedsApi = {
 // ---------------------------------------------------------------------------
 
 export const articlesApi = {
-  list(opts?: { feedId?: string; unread?: boolean }): Promise<Article[]> {
+  list(opts?: { feedId?: string; folderId?: string; unread?: boolean }): Promise<Article[]> {
     const params = new URLSearchParams();
     if (opts?.feedId) params.set("feed_id", opts.feedId);
+    if (opts?.folderId) params.set("folder_id", opts.folderId);
     if (opts?.unread) params.set("unread", "true");
     const qs = params.size > 0 ? `?${params.toString()}` : "";
     return request<Article[]>(`/articles${qs}`);

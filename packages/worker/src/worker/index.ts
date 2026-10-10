@@ -4,6 +4,7 @@ import type { DB } from "../db/client.ts";
 import { getDb } from "../db/client.ts";
 import { feedsRouter } from "./routes/feeds.ts";
 import { articlesRouter } from "./routes/articles.ts";
+import { foldersRouter } from "./routes/folders.ts";
 
 // Hono context variable: db is injected by middleware so routes are testable
 export type Variables = {
@@ -46,6 +47,7 @@ export function createApp(dbOverride?: DB) {
   app.onError((err, c) => c.json({ error: err.message }, 500));
 
   app.route("/api/feeds", feedsRouter);
+  app.route("/api/folders", foldersRouter);
   app.route("/api/articles", articlesRouter);
   app.notFound((c) => c.json({ error: "Not found" }, 404));
 

@@ -15,6 +15,7 @@ export interface Feed {
   siteUrl: string | null;
   description: string | null;
   imageUrl: string | null;
+  folderId: string | null;
   lastFetchedAt: number | null;
   createdAt: number;
 }
@@ -25,6 +26,37 @@ export interface Feed {
  */
 export interface NewFeed {
   url: string;
+}
+
+/**
+ * Input shape for updating a feed (move into/out of a folder).
+ */
+export interface UpdateFeed {
+  folderId: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Folder
+// ---------------------------------------------------------------------------
+
+export interface Folder {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
+/**
+ * Input shape for creating a new folder.
+ */
+export interface NewFolder {
+  name: string;
+}
+
+/**
+ * Input shape for renaming a folder.
+ */
+export interface UpdateFolder {
+  name: string;
 }
 
 // ---------------------------------------------------------------------------

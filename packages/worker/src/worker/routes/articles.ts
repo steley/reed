@@ -1,18 +1,27 @@
 import { Hono } from "hono";
-import { and, eq } from "drizzle-orm";
-import { articles } from "../../db/schema.ts";
+import { and, eq, inArray } from "drizzle-orm";
+import { articles, feeds } from "../../db/schema.ts";
 import type { Variables } from "../index.ts";
 
 export const articlesRouter = new Hono<{ Variables: Variables }>();
 
-// GET /api/articles?feed_id=&unread=true
+// GET /api/articles?feed_id=&folder_id=&unread=true
 articlesRouter.get("/", async (c) => {
   const db = c.get("db");
   const feedId = c.req.query("feed_id");
+  const folderId = c.req.query("folder_id");
   const unread = c.req.query("unread");
 
   const conditions = [];
   if (feedId) conditions.push(eq(articles.feedId, feedId));
+  if (folderId) {
+    conditions.push(
+      inArray(
+        articles.feedId,
+        db.select({ id: feeds.id }).from(feeds).where(eq(feeds.folderId, folderId)),
+      ),
+    );
+  }
   if (unread === "true") conditions.push(eq(articles.read, 0));
 
   const rows = await db

@@ -1087,3 +1087,85 @@ dependencies flagged.
 ### Gotchas
 - Missed scheduled runs leave no trace in the Actions log — the run list
   just shows gaps, nothing failed. Don't debug repo config for this.
+
+---
+
+## Increment — Feed folders (create, rename, delete, drag-and-drop)
+**Date:** 2026-10-11
+**Status:** Complete (production Turso migration pending — see Gotchas)
+
+### What was built
+- **Schema:** new `folders` table (`id`, `name` UNIQUE, `created_at`) and
+  `feeds.folder_id` (FK → folders, ON DELETE SET NULL). Migration
+  `drizzle/0001_fixed_leo.sql` generated via `db:generate` — a plain
+  `CREATE TABLE` + `ALTER TABLE feeds ADD folder_id`, no table rebuild.
+- **API:** `routes/folders.ts` (GET/POST/PATCH/DELETE, duplicate names → 409),
+  `PATCH /api/feeds/:id` accepting `{ folderId: string | null }` (move into/out
+  of a folder, 404 on unknown feed or folder), and a `folder_id` query param on
+  `GET /api/articles` (subquery via `inArray`, keeps the flat `Article[]`
+  response shape). Router mounted in `worker/index.ts`.
+- **Types:** `Folder`, `NewFolder`, `UpdateFolder`, `UpdateFeed`;
+  `Feed.folderId`.
+- **Frontend:** sidebar `Folders` section with nested (indented) feeds and an
+  uncategorized `Feeds` section; "New folder" button in the footer;
+  `NameDialog.tsx` shared create/rename prompt; right-click context menu on
+  folder rows (Rename / Delete, `window.confirm` on delete); HTML5 drag-and-drop
+  of feed rows onto folder rows or the uncategorized zone (custom drop
+  highlight); folder click filters the article list (`?folder_id=`); refresh
+  scope follows selection (feed → that feed, folder → its feeds, all → all).
+- **Tests:** `folders.test.ts` (13 tests) + new cases in `feeds.test.ts`
+  (PATCH move) and `articles.test.ts` (folder_id filter). Suite: 64 passing.
+- Browser smoke-tested end to end against local dev (create → drag in → drag
+  out → rename → delete), including a screenshot of the grouped sidebar.
+
+### Decisions made
+- **`folders` table, not a `feeds.category` text column.** The interaction
+  design (create an empty folder first, then drag feeds in) requires empty
+  folders to exist, and a distinct-value column cannot represent one. Side
+  benefit: rename = one UPDATE on the folder row instead of a bulk feed update;
+  delete keeps feeds via explicit `UPDATE feeds SET folder_id = NULL` before
+  the delete — done in the route, not via the FK's ON DELETE SET NULL, because
+  libsql does not guarantee `PRAGMA foreign_keys` is enabled in every
+  environment (file: vs Turso). UNIQUE on `folders.name` is a column
+  constraint, so the 409 path is DB-backed regardless of pragma state.
+- **Auto-ascending order, no manual sorting** (user asked; recommendation
+  accepted): folders and feeds sort client-side by display name via
+  `compareNames()` (`localeCompare`, sensitivity base — mixed Chinese/English
+  works). Manual ordering would need order columns on two tables, batch
+  reorder endpoints, and a second drag meaning (reorder vs move). Upgrade path
+  if ever wanted: `sort_order` columns + extend DnD.
+- **DnD payload is `text/plain` with the feed id;** native HTML5 events, no
+  drag library. Drop targets: folder rows + uncategorized wrapper. Same-folder
+  drops are short-circuited client-side (no PATCH).
+- **Context menu renders outside `<aside>`** as a fragment sibling: the
+  aside's `translate` utility makes it the containing block for
+  `position: fixed` descendants, which would offset the menu on mobile.
+- **`NameDialog` instead of extending `AddFeedDialog`:** one generic
+  single-name prompt covers new-folder and rename; the URL dialog stays
+  URL-specific. Both follow the same visual pattern.
+
+### Gotchas
+- **Production Turso migration NOT applied yet** — no `TURSO_*` env vars in
+  the working shell. Run `pnpm --filter @reed/worker db:migrate` with the real
+  env vars BEFORE the next deploy: drizzle's `db.select().from(feeds)` lists
+  every schema column explicitly, so `GET /api/feeds` errors with
+  "no such column: folder_id" against an unmigrated database. Order: migrate
+  → deploy.
+- `noStaticElementInteractions` fires on the draggable feed row and the
+  folder row (context menu + drop handlers) — suppressed with biome-ignore
+  comments, consistent with the one precedent in `ArticleReader.tsx`.
+- `exactOptionalPropertyTypes` bites optional props passed explicit
+  `undefined` (`ArticleList.heading` needed `string | undefined`), and
+  `noUncheckedIndexedAccess` bites `duplicate[0].id` — guard with
+  `if (duplicate[0] && …)`.
+- Native `window.confirm` blocks the page's main thread, which makes
+  Playwright's click on the Delete menu item time out even though the dialog
+  is open; in browser automation, hook `window.confirm = () => true` before
+  driving the delete flow. (The confirm itself appears correctly.)
+- `db:local` is not idempotent (`executeMultiple` of the full DDL), and
+  `file:local.db` resolves relative to the worker package. The stale
+  pre-folders `packages/worker/local.db` was deleted and recreated with the
+  new schema + seed data (it was an untracked dev artifact).
+- HTML5 drag-and-drop does not exist on touch devices — there is currently no
+  mobile way to assign a folder (acceptable for now; a long-press menu would
+  be the upgrade path).

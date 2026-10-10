@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { feeds } from "../db/schema.ts";
+import { feeds, folders } from "../db/schema.ts";
 import { createTestDb } from "../lib/test-helpers.ts";
 import { createApp } from "./index.ts";
 
@@ -118,6 +118,77 @@ describe("DELETE /api/feeds/:id", () => {
   it("returns 404 for unknown feed", async () => {
     const res = await app.request("/api/feeds/nonexistent", { method: "DELETE" });
     expect(res.status).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/feeds/:id — move into/out of a folder
+// ---------------------------------------------------------------------------
+
+describe("PATCH /api/feeds/:id", () => {
+  it("moves a feed into a folder", async () => {
+    await db.insert(folders).values({ id: "fol-1", name: "Tech", createdAt: Date.now() });
+    await db
+      .insert(feeds)
+      .values({ id: "mv-1", url: "https://mv.com/feed", createdAt: Date.now() });
+
+    const res = await app.request("/api/feeds/mv-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folderId: "fol-1" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body["folderId"]).toBe("fol-1");
+  });
+
+  it("moves a feed out of a folder with folderId null", async () => {
+    await db.insert(folders).values({ id: "fol-1", name: "Tech", createdAt: Date.now() });
+    await db
+      .insert(feeds)
+      .values({ id: "mv-2", url: "https://mv.com/feed", folderId: "fol-1", createdAt: Date.now() });
+
+    const res = await app.request("/api/feeds/mv-2", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folderId: null }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body["folderId"]).toBeNull();
+  });
+
+  it("returns 404 for unknown feed", async () => {
+    const res = await app.request("/api/feeds/nonexistent", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folderId: null }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 when the target folder does not exist", async () => {
+    await db
+      .insert(feeds)
+      .values({ id: "mv-3", url: "https://mv.com/feed", createdAt: Date.now() });
+    const res = await app.request("/api/feeds/mv-3", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folderId: "no-such-folder" }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 for a non-string non-null folderId", async () => {
+    await db
+      .insert(feeds)
+      .values({ id: "mv-4", url: "https://mv.com/feed", createdAt: Date.now() });
+    const res = await app.request("/api/feeds/mv-4", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folderId: 42 }),
+    });
+    expect(res.status).toBe(400);
   });
 });
 

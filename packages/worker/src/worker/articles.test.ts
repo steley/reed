@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { articles, feeds } from "../db/schema.ts";
+import { articles, feeds, folders } from "../db/schema.ts";
 import { createTestDb } from "../lib/test-helpers.ts";
 import { createApp } from "./index.ts";
 
@@ -93,6 +93,36 @@ describe("GET /api/articles", () => {
     const body = (await res.json()) as unknown[];
     expect(body).toHaveLength(1);
     expect((body[0] as Record<string, unknown>)["id"]).toBe("art-1");
+  });
+
+  it("filters by folder_id across its feeds", async () => {
+    await db.insert(folders).values({ id: "fol-1", name: "Tech", createdAt: Date.now() });
+    // feed-2 joins the folder; feed-1 (FEED_ID) stays uncategorized
+    await db
+      .insert(feeds)
+      .values({
+        id: "feed-2",
+        url: "https://other.com/feed",
+        folderId: "fol-1",
+        createdAt: Date.now(),
+      });
+    await db.insert(articles).values({
+      id: "art-3",
+      feedId: "feed-2",
+      url: "https://other.com/one",
+      createdAt: Date.now(),
+      read: 0,
+    });
+
+    const res = await app.request("/api/articles?folder_id=fol-1");
+    const body = (await res.json()) as unknown[];
+    expect(body).toHaveLength(1);
+    expect((body[0] as Record<string, unknown>)["id"]).toBe("art-3");
+
+    // Empty folder matches nothing
+    await db.insert(folders).values({ id: "fol-2", name: "Empty", createdAt: Date.now() });
+    const empty = await app.request("/api/articles?folder_id=fol-2");
+    expect(await empty.json()).toEqual([]);
   });
 });
 

@@ -145,7 +145,7 @@ WORKLOG).
   the committed copy is stale.
 
 ### Shared types package
-`@reed/types` contains the canonical `Feed` and `Article` interfaces.
+`@reed/types` contains the canonical `Feed`, `Folder`, and `Article` interfaces.
 All packages import from here. Never define these types inline in worker or app code.
 
 ### Drizzle migrations
@@ -170,6 +170,13 @@ the full diagnosis.
 
 ## Data Model
 
+### `folders`
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `text` PK | `crypto.randomUUID()` |
+| `name` | `text` UNIQUE NOT NULL | Display name; duplicates rejected with `409` |
+| `created_at` | `integer` | Unix ms, set on insert |
+
 ### `feeds`
 | Column | Type | Notes |
 |--------|------|-------|
@@ -179,6 +186,7 @@ the full diagnosis.
 | `site_url` | `text` | From feed `<link>` |
 | `description` | `text` | From feed `<description>` / `<subtitle>` |
 | `image_url` | `text` | From feed `<image>` or `<itunes:image>` |
+| `folder_id` | `text` FK → `folders.id` ON DELETE SET NULL | `NULL` = uncategorized. Folder delete nulls it explicitly in the route (libsql does not guarantee the FK pragma is on in every environment) |
 | `last_fetched_at` | `integer` | Unix ms, updated on each successful refresh |
 | `created_at` | `integer` | Unix ms, set on insert |
 
@@ -210,9 +218,14 @@ Base path: `/api`
 |--------|------|-------------|
 | `GET` | `/api/feeds` | List all feeds |
 | `POST` | `/api/feeds` | Add feed `{ url: string }` → `201` |
+| `PATCH` | `/api/feeds/:id` | Move feed into/out of a folder `{ folderId: string \| null }` → `200` |
 | `DELETE` | `/api/feeds/:id` | Delete feed + cascade articles → `204` |
 | `POST` | `/api/feeds/:id/refresh` | Manually refresh feed → `200 { added, updated }` |
-| `GET` | `/api/articles` | List articles. Query params: `feed_id`, `unread=true` |
+| `GET` | `/api/folders` | List folders |
+| `POST` | `/api/folders` | Create folder `{ name: string }` → `201`; duplicate name → `409` |
+| `PATCH` | `/api/folders/:id` | Rename folder `{ name: string }` → `200` |
+| `DELETE` | `/api/folders/:id` | Delete folder; member feeds become uncategorized (not deleted) → `204` |
+| `GET` | `/api/articles` | List articles. Query params: `feed_id`, `folder_id`, `unread=true` |
 | `PATCH` | `/api/articles/:id` | Update article `{ read: boolean }` → `200` |
 
 All error responses: `{ error: string }` with appropriate HTTP status.
@@ -250,6 +263,7 @@ repository secrets; locally they can be exported in the shell or set per-command
 - **Article typography:** rendered content uses the `.article-body` class (defined in `app.css`) — serif stack, hand-styled elements. Do not use Tailwind `prose` classes.
 - **Summary cleaning:** list-card summaries go through `cleanSummary()` in `lib/display.ts` (strips HTML + HN-style metadata blocks). Feed display names fall back to URL hostname via `feedDisplayName()` — never render a raw URL in the sidebar.
 - **Layout:** three panes — sidebar (w-64, mobile drawer with scrim), list (`md:w-[380px]`), reader (flex-1). On mobile the list and reader swap by `selectedArticle` state; no routing library.
+- **Folders:** sidebar groups feeds into folders (`Folders` section + uncategorized `Feeds` section). Order is auto-ascending by display name via `compareNames()` (`localeCompare`, handles mixed Chinese/English) — no manual ordering, no order columns. Feeds move via native HTML5 drag-and-drop (`draggable` rows; folder rows and the uncategorized section are drop targets → `PATCH /api/feeds/:id`). Folders rename/delete via a hand-rolled right-click context menu (`FeedSidebar.tsx`); `NameDialog.tsx` is the shared single-name prompt for create/rename. The context menu must render outside the `<aside>` element — the aside's translate transform makes it the containing block for `position: fixed` descendants. HTML5 DnD does not work on touch; there is no mobile path to assign folders yet.
 - **Article content rendering:** `marked` converts markdown → HTML, injected via `dangerouslySetInnerHTML`. 
 - **Sort order:** client-side by `publishedAt ?? createdAt`, toggleable newest/oldest. Default newest-first.
 - **Auto-mark-read:** selecting an article marks it read automatically.

@@ -1,19 +1,27 @@
-import type { Article, Feed } from "@reed/types";
+import type { Article, Feed, Folder } from "@reed/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AddFeedDialog } from "./components/AddFeedDialog.tsx";
 import { ArticleList } from "./components/ArticleList.tsx";
 import { ArticleReader } from "./components/ArticleReader.tsx";
 import { FeedSidebar } from "./components/FeedSidebar.tsx";
-import { articlesApi, feedsApi } from "./lib/api.ts";
+import { NameDialog } from "./components/NameDialog.tsx";
+import { articlesApi, feedsApi, foldersApi } from "./lib/api.ts";
 
 const THEME_KEY = "reed-theme";
 
 export function App() {
   const [feeds, setFeeds] = useState<Feed[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [addFeedOpen, setAddFeedOpen] = useState(false);
+  // folderId null = create mode; set = rename mode, initial = current name
+  const [folderDialog, setFolderDialog] = useState<{
+    folderId: string | null;
+    initial: string;
+  } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false); // mobile drawer
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sortAsc, setSortAsc] = useState(false);
@@ -25,21 +33,22 @@ export function App() {
     localStorage.setItem(THEME_KEY, isDark ? "dark" : "light");
   }, [isDark]);
 
-  // Load feeds on mount
+  // Load feeds and folders on mount
   useEffect(() => {
     feedsApi.list().then(setFeeds).catch(console.error);
+    foldersApi.list().then(setFolders).catch(console.error);
   }, []);
 
-  const reloadArticles = useCallback(async (feedId: string | null) => {
-    const opts = feedId ? { feedId } : undefined;
+  const reloadArticles = useCallback(async (feedId: string | null, folderId: string | null) => {
+    const opts = feedId ? { feedId } : folderId ? { folderId } : undefined;
     setArticles(await articlesApi.list(opts));
   }, []);
 
-  // Load articles when selected feed changes
+  // Load articles when the selected feed or folder changes
   useEffect(() => {
-    reloadArticles(selectedFeedId).catch(console.error);
+    reloadArticles(selectedFeedId, selectedFolderId).catch(console.error);
     setSelectedArticleId(null);
-  }, [selectedFeedId, reloadArticles]);
+  }, [selectedFeedId, selectedFolderId, reloadArticles]);
 
   // Unread counts per feed (from the currently loaded list; total from all feeds)
   const unreadCounts = useMemo(() => {
@@ -67,6 +76,7 @@ export function App() {
   }, [reloadTotalUnread]);
 
   const selectedFeed = feeds.find((f) => f.id === selectedFeedId) ?? null;
+  const selectedFolder = folders.find((f) => f.id === selectedFolderId) ?? null;
   const selectedArticle = articles.find((a) => a.id === selectedArticleId) ?? null;
   const selectedArticleFeed = selectedArticle
     ? (feeds.find((f) => f.id === selectedArticle.feedId) ?? null)
@@ -75,16 +85,20 @@ export function App() {
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const targets = selectedFeedId ? [selectedFeedId] : feeds.map((f) => f.id);
+      const targets = selectedFeedId
+        ? [selectedFeedId]
+        : selectedFolderId
+          ? feeds.filter((f) => f.folderId === selectedFolderId).map((f) => f.id)
+          : feeds.map((f) => f.id);
       await Promise.allSettled(targets.map((id) => feedsApi.refresh(id)));
-      await Promise.all([reloadArticles(selectedFeedId), reloadTotalUnread()]);
+      await Promise.all([reloadArticles(selectedFeedId, selectedFolderId), reloadTotalUnread()]);
       setFeeds(await feedsApi.list());
     } catch (err) {
       console.error("Refresh failed:", err);
     } finally {
       setIsRefreshing(false);
     }
-  }, [feeds, selectedFeedId, reloadArticles, reloadTotalUnread]);
+  }, [feeds, selectedFeedId, selectedFolderId, reloadArticles, reloadTotalUnread]);
 
   const handleAddFeed = useCallback(
     async (url: string) => {
@@ -97,7 +111,7 @@ export function App() {
       }
       setFeeds(await feedsApi.list());
       setSelectedFeedId(feed.id);
-      await reloadArticles(feed.id);
+      await reloadArticles(feed.id, null);
       await reloadTotalUnread();
     },
     [reloadArticles, reloadTotalUnread],
@@ -136,20 +150,77 @@ export function App() {
 
   const handleSelectFeed = useCallback((id: string | null) => {
     setSelectedFeedId(id);
+    setSelectedFolderId(null);
     setSidebarOpen(false);
   }, []);
+
+  const handleSelectFolder = useCallback((id: string | null) => {
+    setSelectedFolderId(id);
+    setSelectedFeedId(null);
+    setSidebarOpen(false);
+  }, []);
+
+  const handleAddFolder = useCallback(async (name: string) => {
+    const folder = await foldersApi.create({ name });
+    setFolders((prev) => [...prev, folder]);
+  }, []);
+
+  const handleRenameFolder = useCallback(async (id: string, name: string) => {
+    const updated = await foldersApi.rename(id, { name });
+    setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)));
+  }, []);
+
+  const handleDeleteFolder = useCallback(
+    async (id: string) => {
+      await foldersApi.delete(id);
+      setFolders((prev) => prev.filter((f) => f.id !== id));
+      // Feeds survive; move them back to uncategorized in local state
+      setFeeds((prev) => prev.map((f) => (f.folderId === id ? { ...f, folderId: null } : f)));
+      if (selectedFolderId === id) {
+        setSelectedFolderId(null);
+        setSelectedArticleId(null);
+      }
+    },
+    [selectedFolderId],
+  );
+
+  const handleMoveFeed = useCallback(
+    async (feedId: string, folderId: string | null) => {
+      const feed = feeds.find((f) => f.id === feedId);
+      if (!feed || feed.folderId === folderId) return;
+      const updated = await feedsApi.update(feedId, { folderId });
+      setFeeds((prev) => prev.map((f) => (f.id === feedId ? updated : f)));
+      // If the moved feed left the folder being viewed, reload its articles
+      if (selectedFolderId && folderId !== selectedFolderId) {
+        await reloadArticles(null, selectedFolderId).catch(console.error);
+      }
+    },
+    [feeds, selectedFolderId, reloadArticles],
+  );
 
   return (
     <div className="flex h-dvh overflow-hidden bg-canvas text-ink">
       <FeedSidebar
         feeds={feeds}
+        folders={folders}
         selectedFeedId={selectedFeedId}
+        selectedFolderId={selectedFolderId}
         unreadCounts={unreadCounts}
         totalUnread={totalUnread}
         isDark={isDark}
         open={sidebarOpen}
         onSelectFeed={handleSelectFeed}
+        onSelectFolder={handleSelectFolder}
         onAddFeed={() => setAddFeedOpen(true)}
+        onAddFolder={() => setFolderDialog({ folderId: null, initial: "" })}
+        onRenameFolder={(id) =>
+          setFolderDialog({
+            folderId: id,
+            initial: folders.find((f) => f.id === id)?.name ?? "",
+          })
+        }
+        onDeleteFolder={handleDeleteFolder}
+        onMoveFeed={handleMoveFeed}
         onToggleDark={() => setIsDark((d) => !d)}
         onDeleteFeed={handleDeleteFeed}
         onClose={() => setSidebarOpen(false)}
@@ -165,6 +236,7 @@ export function App() {
           articles={articles}
           selectedArticleId={selectedArticleId}
           selectedFeed={selectedFeed}
+          heading={selectedFolder?.name ?? undefined}
           feedsById={Object.fromEntries(feeds.map((f) => [f.id, f]))}
           isRefreshing={isRefreshing}
           sortAsc={sortAsc}
@@ -186,6 +258,23 @@ export function App() {
       </div>
 
       <AddFeedDialog open={addFeedOpen} onOpenChange={setAddFeedOpen} onAdd={handleAddFeed} />
+      <NameDialog
+        open={folderDialog !== null}
+        title={folderDialog?.folderId ? "Rename folder" : "New folder"}
+        initial={folderDialog?.initial ?? ""}
+        submitLabel={folderDialog?.folderId ? "Rename" : "Create"}
+        onOpenChange={(o) => {
+          if (!o) setFolderDialog(null);
+        }}
+        onSubmit={async (name) => {
+          if (!folderDialog) return;
+          if (folderDialog.folderId) {
+            await handleRenameFolder(folderDialog.folderId, name);
+          } else {
+            await handleAddFolder(name);
+          }
+        }}
+      />
     </div>
   );
 }

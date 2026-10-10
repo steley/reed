@@ -63,6 +63,14 @@ export function feedDisplayName(feed: { title: string | null; url: string }): st
   }
 }
 
+/**
+ * Locale-aware case-insensitive name comparison for auto-ascending sidebar
+ * order (feeds, folders). localeCompare handles mixed Chinese/English names.
+ */
+export function compareNames(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { sensitivity: "base" });
+}
+
 const AVATAR_HUES = [14, 32, 95, 150, 172, 200, 225, 262, 290, 330];
 
 /** Deterministic muted hue for a feed's letter avatar. */

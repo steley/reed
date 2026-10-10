@@ -1,5 +1,11 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+export const folders = sqliteTable("folders", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  createdAt: integer("created_at").notNull(),
+});
+
 export const feeds = sqliteTable("feeds", {
   id: text("id").primaryKey(),
   url: text("url").notNull().unique(),
@@ -7,6 +13,7 @@ export const feeds = sqliteTable("feeds", {
   siteUrl: text("site_url"),
   description: text("description"),
   imageUrl: text("image_url"),
+  folderId: text("folder_id").references(() => folders.id, { onDelete: "set null" }),
   lastFetchedAt: integer("last_fetched_at"),
   createdAt: integer("created_at").notNull(),
 });

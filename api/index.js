@@ -14268,7 +14268,13 @@ function drizzle(...params) {
 var schema_exports = {};
 __export(schema_exports, {
   articles: () => articles,
-  feeds: () => feeds
+  feeds: () => feeds,
+  folders: () => folders
+});
+var folders = sqliteTable("folders", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  createdAt: integer("created_at").notNull()
 });
 var feeds = sqliteTable("feeds", {
   id: text("id").primaryKey(),
@@ -14277,6 +14283,7 @@ var feeds = sqliteTable("feeds", {
   siteUrl: text("site_url"),
   description: text("description"),
   imageUrl: text("image_url"),
+  folderId: text("folder_id").references(() => folders.id, { onDelete: "set null" }),
   lastFetchedAt: integer("last_fetched_at"),
   createdAt: integer("created_at").notNull()
 });
@@ -14555,6 +14562,33 @@ feedsRouter.delete("/:id", async (c) => {
   await db.delete(feeds).where(eq(feeds.id, id));
   return new Response(null, { status: 204 });
 });
+feedsRouter.patch("/:id", async (c) => {
+  const id = c.req.param("id");
+  let body;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  const folderId = body.folderId;
+  if (folderId !== null && typeof folderId !== "string") {
+    return c.json({ error: "folderId (string | null) is required" }, 400);
+  }
+  const db = c.get("db");
+  const existing = await db.select({ id: feeds.id }).from(feeds).where(eq(feeds.id, id)).limit(1);
+  if (existing.length === 0) {
+    return c.json({ error: "Feed not found" }, 404);
+  }
+  if (folderId !== null) {
+    const folder = await db.select({ id: folders.id }).from(folders).where(eq(folders.id, folderId)).limit(1);
+    if (folder.length === 0) {
+      return c.json({ error: "Folder not found" }, 404);
+    }
+  }
+  await db.update(feeds).set({ folderId }).where(eq(feeds.id, id));
+  const updated = await db.select().from(feeds).where(eq(feeds.id, id)).limit(1);
+  return c.json(updated[0]);
+});
 feedsRouter.post("/:id/refresh", async (c) => {
   const id = c.req.param("id");
   const db = c.get("db");
@@ -14576,10 +14610,19 @@ var articlesRouter = new Hono2();
 articlesRouter.get("/", async (c) => {
   const db = c.get("db");
   const feedId = c.req.query("feed_id");
+  const folderId = c.req.query("folder_id");
   const unread = c.req.query("unread");
   const conditions = [];
   if (feedId)
     conditions.push(eq(articles.feedId, feedId));
+  if (folderId) {
+    conditions.push(
+      inArray(
+        articles.feedId,
+        db.select({ id: feeds.id }).from(feeds).where(eq(feeds.folderId, folderId))
+      )
+    );
+  }
   if (unread === "true")
     conditions.push(eq(articles.read, 0));
   const rows = await db.select().from(articles).where(conditions.length > 0 ? and(...conditions) : void 0).orderBy(articles.publishedAt);
@@ -14605,6 +14648,75 @@ articlesRouter.patch("/:id", async (c) => {
   await db.update(articles).set({ read: read ? 1 : 0 }).where(eq(articles.id, id));
   const updated = await db.select().from(articles).where(eq(articles.id, id)).limit(1);
   return c.json(updated[0]);
+});
+
+// src/worker/routes/folders.ts
+var foldersRouter = new Hono2();
+function parseName(body) {
+  const name = body?.name;
+  return typeof name === "string" && name.trim() ? name.trim() : null;
+}
+foldersRouter.get("/", async (c) => {
+  const db = c.get("db");
+  const rows = await db.select().from(folders).orderBy(folders.createdAt);
+  return c.json(rows);
+});
+foldersRouter.post("/", async (c) => {
+  let body;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  const name = parseName(body);
+  if (!name) {
+    return c.json({ error: "name is required" }, 400);
+  }
+  const db = c.get("db");
+  const existing = await db.select({ id: folders.id }).from(folders).where(eq(folders.name, name)).limit(1);
+  if (existing.length > 0) {
+    return c.json({ error: "Folder name already exists" }, 409);
+  }
+  const id = crypto.randomUUID();
+  await db.insert(folders).values({ id, name, createdAt: Date.now() });
+  const created = await db.select().from(folders).where(eq(folders.id, id)).limit(1);
+  return c.json(created[0], 201);
+});
+foldersRouter.patch("/:id", async (c) => {
+  const id = c.req.param("id");
+  let body;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  const name = parseName(body);
+  if (!name) {
+    return c.json({ error: "name is required" }, 400);
+  }
+  const db = c.get("db");
+  const existing = await db.select({ id: folders.id }).from(folders).where(eq(folders.id, id)).limit(1);
+  if (existing.length === 0) {
+    return c.json({ error: "Folder not found" }, 404);
+  }
+  const duplicate = await db.select({ id: folders.id }).from(folders).where(eq(folders.name, name)).limit(1);
+  if (duplicate[0] && duplicate[0].id !== id) {
+    return c.json({ error: "Folder name already exists" }, 409);
+  }
+  await db.update(folders).set({ name }).where(eq(folders.id, id));
+  const updated = await db.select().from(folders).where(eq(folders.id, id)).limit(1);
+  return c.json(updated[0]);
+});
+foldersRouter.delete("/:id", async (c) => {
+  const id = c.req.param("id");
+  const db = c.get("db");
+  const existing = await db.select({ id: folders.id }).from(folders).where(eq(folders.id, id)).limit(1);
+  if (existing.length === 0) {
+    return c.json({ error: "Folder not found" }, 404);
+  }
+  await db.update(feeds).set({ folderId: null }).where(eq(feeds.folderId, id));
+  await db.delete(folders).where(eq(folders.id, id));
+  return new Response(null, { status: 204 });
 });
 
 // src/worker/index.ts
@@ -14635,6 +14747,7 @@ function createApp(dbOverride) {
   });
   app2.onError((err, c) => c.json({ error: err.message }, 500));
   app2.route("/api/feeds", feedsRouter);
+  app2.route("/api/folders", foldersRouter);
   app2.route("/api/articles", articlesRouter);
   app2.notFound((c) => c.json({ error: "Not found" }, 404));
   return app2;
