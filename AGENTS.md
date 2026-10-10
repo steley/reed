@@ -28,6 +28,12 @@ These rules are mandatory. Follow them on every task without exception.
    already made and dead ends already explored. Do not re-litigate settled
    decisions without a good reason.
 
+5. **Never commit private infrastructure identifiers.** This repo is public.
+   Do not write real production hostnames, domains, IPs, or account IDs into
+   any git-tracked file (including WORKLOG.md history entries and commit
+   messages). Refer to them as "the production domain" or use a placeholder.
+   Real values live in env vars / deploy config only.
+
 ---
 
 ## What This Is

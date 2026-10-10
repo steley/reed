@@ -746,7 +746,7 @@ entry → native libsql binding) at runtime even when a client is injected.
 
 ---
 
-## Production debugging: three fixes to make reader.wesync.cn fully work
+## Production debugging: three fixes to make the production site fully work
 **Date:** 2026-10-10
 **Status:** Complete — all API endpoints verified live
 
