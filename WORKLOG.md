@@ -778,3 +778,12 @@ refresh (sspai: +10 articles), article listing.
 - Verified via Playwright (1440x900): trigger right-aligned below title
   (x=239..271 of 280), visible and clickable when collapsed, re-expand works
   (width back to 280).
+
+### Correction 3 (22:49) — final header layout
+- User verdict: two-row header too tall. Reverted to single row: RSS icon +
+  title + `Trigger className="ml-auto"` on the same line, trigger
+  right-aligned (gap 9px). Collapsed mode: icon + title hidden via
+  `group-data-[state=collapsed]/sidebar:hidden`, trigger alone fits the 3rem
+  rail exactly (32px in 32px content width), visible and clickable.
+  Verified via Playwright: same row as title, right-aligned, collapse +
+  re-expand cycle works.
