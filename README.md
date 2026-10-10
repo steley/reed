@@ -1,15 +1,13 @@
 # cloud-reader
 
-A personal RSS reader built entirely on Cloudflare — Worker, D1, and static assets in a single deployment.
-
-**Live:** https://cloud-reader.alexcostaviana.workers.dev
+A personal RSS reader built on Vercel (Hono), Turso (libSQL/SQLite), and GitHub Actions — static assets and API in one deployment, scheduled refresh in CI.
 
 ---
 
 ## Features
 
 - Add RSS 2.0 and Atom feeds by URL
-- Hourly background refresh via Cloudflare cron triggers; manual refresh-all or per-feed
+- Hourly background refresh via GitHub Actions; manual refresh-all or per-feed
 - Read/unread tracking, auto-mark-read on open
 - Sort articles newest or oldest first
 - Markdown and HTML article content rendering
@@ -24,8 +22,9 @@ A personal RSS reader built entirely on Cloudflare — Worker, D1, and static as
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Cloudflare Workers |
-| Database | Cloudflare D1 (SQLite) |
+| Runtime | Vercel serverless functions (Node) |
+| Database | Turso (libSQL/SQLite) |
+| Scheduled refresh | GitHub Actions cron |
 | ORM | Drizzle ORM + drizzle-kit |
 | HTTP router | Hono |
 | RSS parsing | fast-xml-parser |
@@ -41,10 +40,13 @@ A personal RSS reader built entirely on Cloudflare — Worker, D1, and static as
 
 ```
 cloud-reader/
+├── api/            # Vercel serverless entry (Hono via hono/vercel)
+├── .github/        # workflows/refresh.yml — hourly feed refresh
 ├── packages/
 │   ├── types/      # @cloud-reader/types  — shared TypeScript types
-│   ├── worker/     # @cloud-reader/worker — REST API + cron + D1
+│   ├── worker/     # @cloud-reader/worker — REST API + Turso + refresh scripts
 │   └── app/        # @cloud-reader/app    — React SPA
+├── vercel.json     # Build config + SPA fallback
 ├── AGENTS.md       # Architecture reference for agents and contributors
 └── WORKLOG.md      # Decision log for every increment
 ```
@@ -72,10 +74,13 @@ All responses are JSON. Errors return `{ error: string }`.
 # Install dependencies
 pnpm install
 
-# Run the worker locally (with local D1)
-pnpm dev
+# Initialise a local SQLite file DB with the schema (one-time)
+TURSO_DATABASE_URL=file:local.db pnpm --filter @cloud-reader/worker db:local
 
-# Run the frontend dev server (proxies /api/* to wrangler on :8787)
+# Run the API locally on :8787
+TURSO_DATABASE_URL=file:local.db pnpm dev
+
+# Run the frontend dev server (proxies /api/* to :8787)
 pnpm --filter @cloud-reader/app dev
 
 # Run all tests
@@ -90,19 +95,23 @@ pnpm type-check
 ## Deployment
 
 ```bash
-# Build frontend + deploy worker + assets to Cloudflare
+# First time: import the repo in Vercel, set TURSO_DATABASE_URL /
+# TURSO_AUTH_TOKEN project env vars, bind a custom domain.
+
+# Deploy from the CLI (or just push — Vercel builds from the repo)
 pnpm deploy
 ```
 
-Migrations are applied separately:
+Schema migrations are applied directly to Turso:
 
 ```bash
-# Apply to local D1
+export TURSO_DATABASE_URL=libsql://...
+export TURSO_AUTH_TOKEN=...
 pnpm --filter @cloud-reader/worker db:migrate
-
-# Apply to production D1
-pnpm --filter @cloud-reader/worker db:migrate:remote
 ```
+
+The hourly refresh workflow (`.github/workflows/refresh.yml`) needs the
+`TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` repository secrets.
 
 ---
 
@@ -111,8 +120,7 @@ pnpm --filter @cloud-reader/worker db:migrate:remote
 ```bash
 # Edit packages/worker/src/db/schema.ts, then:
 pnpm --filter @cloud-reader/worker db:generate   # generates SQL in drizzle/
-pnpm --filter @cloud-reader/worker db:migrate     # apply locally
-pnpm --filter @cloud-reader/worker db:migrate:remote  # apply to production
+pnpm --filter @cloud-reader/worker db:migrate    # apply to Turso (TURSO_* env vars)
 ```
 
 ---
@@ -128,4 +136,4 @@ Every commit runs:
 
 ## Roadmap
 
-- **Phase 3:** Cloudflare Access auth, CLI tool, full-text search (D1 FTS5), OPML import/export
+- **Phase 3:** auth, CLI tool, full-text search (FTS5), OPML import/export

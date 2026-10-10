@@ -23,7 +23,7 @@ let app: ReturnType<typeof createApp>;
 
 beforeEach(() => {
   db = createTestDb();
-  app = createApp(db as never);
+  app = createApp(db);
   vi.stubGlobal("fetch", vi.fn());
 });
 

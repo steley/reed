@@ -32,7 +32,7 @@ const ARTICLE_2 = {
 
 beforeEach(async () => {
   db = createTestDb();
-  app = createApp(db as never);
+  app = createApp(db);
   await db
     .insert(feeds)
     .values({ id: FEED_ID, url: "https://example.com/feed", createdAt: Date.now() });
@@ -57,15 +57,13 @@ describe("GET /api/articles", () => {
     await db
       .insert(feeds)
       .values({ id: "feed-2", url: "https://other.com/feed", createdAt: Date.now() });
-    await db
-      .insert(articles)
-      .values({
-        id: "art-3",
-        feedId: "feed-2",
-        url: "https://other.com/one",
-        createdAt: Date.now(),
-        read: 0,
-      });
+    await db.insert(articles).values({
+      id: "art-3",
+      feedId: "feed-2",
+      url: "https://other.com/one",
+      createdAt: Date.now(),
+      read: 0,
+    });
 
     const res = await app.request(`/api/articles?feed_id=${FEED_ID}`);
     const body = (await res.json()) as unknown[];
@@ -83,15 +81,13 @@ describe("GET /api/articles", () => {
     await db
       .insert(feeds)
       .values({ id: "feed-2", url: "https://other.com/feed", createdAt: Date.now() });
-    await db
-      .insert(articles)
-      .values({
-        id: "art-3",
-        feedId: "feed-2",
-        url: "https://other.com/one",
-        createdAt: Date.now(),
-        read: 0,
-      });
+    await db.insert(articles).values({
+      id: "art-3",
+      feedId: "feed-2",
+      url: "https://other.com/one",
+      createdAt: Date.now(),
+      read: 0,
+    });
 
     const res = await app.request(`/api/articles?feed_id=${FEED_ID}&unread=true`);
     const body = (await res.json()) as unknown[];

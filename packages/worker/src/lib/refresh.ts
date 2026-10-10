@@ -1,16 +1,16 @@
 import { eq } from "drizzle-orm";
-import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { RefreshResult } from "@cloud-reader/types";
+import type { DB } from "../db/client.ts";
 import { articles, feeds } from "../db/schema.ts";
 import { parseFeed } from "./parse.ts";
 
 /**
- * Fetch a feed URL, parse its contents, update feed metadata in D1,
+ * Fetch a feed URL, parse its contents, update feed metadata in the database,
  * and upsert articles. Returns counts of added and updated articles.
  *
  * Throws if the HTTP request fails or the feed cannot be parsed.
  */
-export async function refreshFeed(feedId: string, db: DrizzleD1Database): Promise<RefreshResult> {
+export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult> {
   // Load the feed record
   const feedRows = await db.select().from(feeds).where(eq(feeds.id, feedId)).limit(1);
 

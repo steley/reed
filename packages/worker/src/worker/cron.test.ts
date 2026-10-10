@@ -54,7 +54,7 @@ describe("runCron", () => {
       .mockResolvedValueOnce(new Response(RSS_FEED_A, { status: 200 }))
       .mockResolvedValueOnce(new Response(RSS_FEED_B, { status: 200 }));
 
-    await runCron(db as never);
+    await runCron(db);
 
     const stored = await db.select().from(articles);
     expect(stored).toHaveLength(2);
@@ -67,7 +67,7 @@ describe("runCron", () => {
       .mockResolvedValueOnce(new Response(RSS_FEED_B, { status: 200 }));
 
     // Should not throw even though feed-a fails
-    await expect(runCron(db as never)).resolves.toBeUndefined();
+    await expect(runCron(db)).resolves.toBeUndefined();
 
     const stored = await db.select().from(articles);
     // Only feed-b articles stored — feed-a failed
@@ -78,7 +78,7 @@ describe("runCron", () => {
   it("succeeds with no feeds", async () => {
     // Clear feeds
     await db.delete(feeds);
-    await expect(runCron(db as never)).resolves.toBeUndefined();
+    await expect(runCron(db)).resolves.toBeUndefined();
     expect(fetch).not.toHaveBeenCalled();
   });
 });

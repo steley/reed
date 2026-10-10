@@ -3,9 +3,9 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
-    "types": ["@cloudflare/workers-types"],
+    "types": ["node"],
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src", "vitest.config.ts"]
+  "include": ["src", "scripts", "drizzle.config.ts", "vitest.config.ts"]
 }

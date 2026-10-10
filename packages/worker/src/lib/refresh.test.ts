@@ -86,21 +86,21 @@ function mockFetch(body: string, status = 200) {
 describe("refreshFeed", () => {
   it("returns added count for new articles", async () => {
     mockFetch(RSS_XML);
-    const result = await refreshFeed(FEED_ID, db as never);
+    const result = await refreshFeed(FEED_ID, db);
     expect(result.added).toBe(2);
     expect(result.updated).toBe(0);
   });
 
   it("stores articles in the database", async () => {
     mockFetch(RSS_XML);
-    await refreshFeed(FEED_ID, db as never);
+    await refreshFeed(FEED_ID, db);
     const stored = await db.select().from(articles).where(eq(articles.feedId, FEED_ID));
     expect(stored).toHaveLength(2);
   });
 
   it("updates feed metadata after refresh", async () => {
     mockFetch(RSS_XML);
-    await refreshFeed(FEED_ID, db as never);
+    await refreshFeed(FEED_ID, db);
     const feed = await db.select().from(feeds).where(eq(feeds.id, FEED_ID)).limit(1);
     expect(feed[0]!.title).toBe("My Blog");
     expect(feed[0]!.siteUrl).toBe("https://blog.example.com");
@@ -111,7 +111,7 @@ describe("refreshFeed", () => {
 
   it("stores article fields correctly", async () => {
     mockFetch(RSS_XML);
-    await refreshFeed(FEED_ID, db as never);
+    await refreshFeed(FEED_ID, db);
     const stored = await db
       .select()
       .from(articles)
@@ -127,10 +127,10 @@ describe("refreshFeed", () => {
 
   it("upserts articles on re-refresh — updates title and content", async () => {
     mockFetch(RSS_XML);
-    await refreshFeed(FEED_ID, db as never);
+    await refreshFeed(FEED_ID, db);
 
     mockFetch(RSS_XML_UPDATED);
-    const result = await refreshFeed(FEED_ID, db as never);
+    const result = await refreshFeed(FEED_ID, db);
     expect(result.added).toBe(0);
     expect(result.updated).toBe(1);
 
@@ -145,7 +145,7 @@ describe("refreshFeed", () => {
 
   it("preserves read flag on upsert", async () => {
     mockFetch(RSS_XML);
-    await refreshFeed(FEED_ID, db as never);
+    await refreshFeed(FEED_ID, db);
 
     // Mark the article as read
     await db
@@ -155,7 +155,7 @@ describe("refreshFeed", () => {
 
     // Re-refresh
     mockFetch(RSS_XML_UPDATED);
-    await refreshFeed(FEED_ID, db as never);
+    await refreshFeed(FEED_ID, db);
 
     const stored = await db
       .select()
@@ -166,16 +166,16 @@ describe("refreshFeed", () => {
   });
 
   it("throws when feed is not found in DB", async () => {
-    await expect(refreshFeed("nonexistent-id", db as never)).rejects.toThrow("Feed not found");
+    await expect(refreshFeed("nonexistent-id", db)).rejects.toThrow("Feed not found");
   });
 
   it("throws when HTTP fetch fails", async () => {
     mockFetch("Not Found", 404);
-    await expect(refreshFeed(FEED_ID, db as never)).rejects.toThrow("404");
+    await expect(refreshFeed(FEED_ID, db)).rejects.toThrow("404");
   });
 
   it("throws when XML cannot be parsed", async () => {
     mockFetch(INVALID_XML);
-    await expect(refreshFeed(FEED_ID, db as never)).rejects.toThrow("unrecognized format");
+    await expect(refreshFeed(FEED_ID, db)).rejects.toThrow("unrecognized format");
   });
 });

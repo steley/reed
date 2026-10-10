@@ -1,26 +1,27 @@
 import { Hono } from "hono";
-import { drizzle } from "drizzle-orm/d1";
-import type { DrizzleD1Database } from "drizzle-orm/d1";
+import type { DB } from "../db/client.ts";
+import { getDb } from "../db/client.ts";
 import { feedsRouter } from "./routes/feeds.ts";
 import { articlesRouter } from "./routes/articles.ts";
 
-export interface Env {
-  DB: D1Database;
-  ASSETS: Fetcher;
-}
+/**
+ * No platform bindings — the database is reached over HTTP (libsql client) and
+ * configured via environment variables (TURSO_DATABASE_URL, TURSO_AUTH_TOKEN).
+ * Kept as Hono's Bindings type for route typing consistency.
+ */
+export type Env = Record<string, string>;
 
 // Hono context variable: db is injected by middleware so routes are testable
 export type Variables = {
-  db: DrizzleD1Database;
+  db: DB;
 };
 
-export function createApp(dbOverride?: DrizzleD1Database) {
+export function createApp(dbOverride?: DB) {
   const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
   // Inject db into context — allows tests to pass in a test db
   app.use("*", async (c, next) => {
-    const db = dbOverride ?? drizzle(c.env.DB);
-    c.set("db", db);
+    c.set("db", dbOverride ?? getDb());
     await next();
   });
 
@@ -31,15 +32,3 @@ export function createApp(dbOverride?: DrizzleD1Database) {
 
   return app;
 }
-
-const app = createApp();
-
-export default {
-  fetch: app.fetch,
-
-  async scheduled(_event: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
-    const db = drizzle(env.DB);
-    const { runCron } = await import("./cron.ts");
-    await runCron(db);
-  },
-} satisfies ExportedHandler<Env>;

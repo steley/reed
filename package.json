@@ -2,14 +2,14 @@
   "name": "cloud-reader",
   "version": "0.0.1",
   "private": true,
-  "description": "Personal RSS reader on Cloudflare Workers + D1",
+  "description": "Personal RSS reader on Vercel (Hono) + Turso + GitHub Actions",
   "scripts": {
     "dev": "pnpm --filter @cloud-reader/worker dev",
     "build": "pnpm --filter @cloud-reader/app build",
-    "deploy": "pnpm --filter @cloud-reader/app build && pnpm run --filter @cloud-reader/worker deploy",
+    "deploy": "vercel deploy --prod",
     "test": "pnpm -r run test",
     "test:run": "pnpm -r run test:run",
-    "type-check": "pnpm -r run type-check",
+    "type-check": "pnpm -r run type-check && tsc -p api",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "prepare": "husky"
@@ -27,13 +27,15 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
-      "sharp",
-      "workerd"
+      "sharp"
     ]
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.9",
+    "@types/node": "^22.13.0",
     "husky": "^9.1.7",
-    "lint-staged": "^16.4.0"
+    "hono": "^4.12.9",
+    "lint-staged": "^16.4.0",
+    "typescript": "^5.7.3"
   }
 }

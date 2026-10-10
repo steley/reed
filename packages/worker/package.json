@@ -2,29 +2,32 @@
   "name": "@cloud-reader/worker",
   "version": "0.0.1",
   "private": true,
-  "description": "Cloudflare Worker — REST API, D1, cron",
+  "description": "REST API (Hono) + Turso/libsql database + cron refresh scripts",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "dev": "tsx scripts/dev.ts",
+    "refresh": "tsx scripts/refresh.ts",
     "type-check": "tsc --noEmit",
     "test": "vitest --passWithNoTests",
     "test:run": "vitest run --passWithNoTests",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "wrangler d1 migrations apply cloud-reader --local",
-    "db:migrate:remote": "wrangler d1 migrations apply cloud-reader --remote",
-    "db:studio": "drizzle-kit studio"
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "db:local": "tsx scripts/local-db.ts",
+    "db:export-d1": "wrangler d1 export cloud-reader --remote --output=./dump.sql"
   },
   "dependencies": {
     "@cloud-reader/types": "workspace:*",
+    "@libsql/client": "^0.17.2",
     "drizzle-orm": "^0.41.0",
     "fast-xml-parser": "^4.5.3",
     "hono": "^4.12.9"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250327.0",
-    "@libsql/client": "^0.17.2",
+    "@hono/node-server": "^1.14.4",
+    "@types/node": "^22.13.0",
     "drizzle-kit": "^0.30.4",
+    "tsx": "^4.19.3",
     "typescript": "^5.7.3",
     "vitest": "^3.1.1",
     "wrangler": "^4.4.0"

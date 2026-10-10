@@ -591,3 +591,65 @@ Feeds with full article content in `content:encoded` encode all HTML as XML enti
 - **Light mode default over OS preference:** The app looks better in light mode at this
   stage of polish. The toggle is still available for users who prefer dark. Removing the
   `matchMedia` call also avoids a flash of dark mode on first load for OS dark mode users.
+
+---
+
+## Platform migration: Cloudflare Workers + D1 → Vercel + Turso + GitHub Actions
+**Date:** 2026-10-10
+**Status:** Complete (code side; Vercel project import + Turso provisioning pending)
+
+### What was built
+- `packages/worker/src/db/client.ts` — new libsql client singleton (`getDb()`), reads
+  `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` env vars; supports `libsql://` (Turso) and
+  `file:` (local dev) URLs. Exports the canonical `DB` type (`LibSQLDatabase<typeof schema>`).
+- `packages/worker/src/worker/index.ts` — dropped D1 binding + `ExportedHandler` +
+  `scheduled()`; `createApp()` unchanged otherwise. No platform bindings left.
+- `refresh.ts` / `cron.ts` / all 4 route+test files — `DrizzleD1Database` → `DB`;
+  removed all `db as never` casts in tests (types now align exactly).
+- `src/db/ddl.ts` — extracted shared CREATE statements; used by `test-helpers.ts`
+  (in-memory test DB) and new `scripts/local-db.ts` (local file DB init).
+- `api/[[...route]].ts` + `api/tsconfig.json` — Vercel serverless entry, Hono app
+  adapted via `hono/vercel` `handle()`. Routes stay full-path (`/api/feeds`).
+- `vercel.json` — `pnpm --filter @cloud-reader/app build` → `packages/app/dist`,
+  SPA fallback rewrite excludes `/api/`.
+- `.github/workflows/refresh.yml` — hourly cron + manual dispatch; runs
+  `scripts/refresh.ts` (tsx) against Turso. Secrets: `TURSO_DATABASE_URL`,
+  `TURSO_AUTH_TOKEN`.
+- `scripts/dev.ts` — `@hono/node-server` dev server on :8787 (Vite proxy target
+  unchanged). `scripts/refresh.ts` — one-shot cron replacement.
+- `drizzle.config.ts` — `dialect: "turso"`, credentials from `TURSO_*` env vars.
+- `package.json` (worker): `@libsql/client` moved to dependencies; added
+  `@hono/node-server`, `@types/node`, `tsx`; wrangler kept only for the one-time
+  `db:export-d1` (D1 dump). Root: added `hono`, `typescript`, `@types/node`;
+  type-check now also covers `api/`.
+- Docs: AGENTS.md (stack/decisions/cron→Actions/deployment/commands), README.md.
+
+### Decisions made
+- **Turso over D1:** user's real-world testing shows Vercel + custom domain is
+  faster from mainland China than Cloudflare — that measurement beat any
+  benchmark, so platform moved. Turso keeps the SQLite/Drizzle schema as-is.
+- **GitHub Actions over Vercel Cron:** Hobby plan limits cron to daily; Actions
+  gives hourly free and runs identical `runCron()` code in full Node.
+- **Full-path Hono routes:** `hono/vercel` `handle()` passes the original URL
+  through, so existing `/api/*` routes needed zero changes.
+- **Env-var DB config (no bindings):** same code path on Vercel / Actions /
+  local; `file:` URLs make offline dev trivial.
+
+### Dead ends / gotchas
+- `@libsql/client` `createClient({ authToken: string | undefined })` fails under
+  `exactOptionalPropertyTypes` — must pass `authToken` only when defined.
+- pnpm incremental installs in this sandbox kept failing with
+  `ERR_PNPM_CODEBUDDY_BROKER_DENY` (ENOENT/EEXIST on symlink creation mid-reify,
+  different package each run). Clean delete of all `node_modules` + one fresh
+  `pnpm install` fixed it reliably — do that instead of retrying incremental.
+- Removed `workerd` from `pnpm.onlyBuiltDependencies` (its build script is
+  ignored now; wrangler d1 export doesn't need the workerd binary).
+
+### Remaining (outside repo)
+1. Create Turso DB: `turso db create cloud-reader --location sin` (or hkg),
+   `turso db tokens create`, optional `turso db replicas add hkg`.
+2. Apply schema: `db:migrate` with TURSO_* env vars (drizzle/0000_*.sql).
+3. Migrate data: `db:export-d1` → `turso db shell <db> < dump.sql`; remove
+   wrangler dep + `db:export-d1` script afterwards.
+4. Import repo in Vercel, set env vars, bind domain; delete the CF Worker.
+5. Add the two secrets to GitHub repo; trigger `workflow_dispatch` once.
