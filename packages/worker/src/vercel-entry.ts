@@ -1,5 +1,5 @@
 import { handle } from "hono/vercel";
-import { createApp } from "../packages/worker/src/worker/index.ts";
+import { createApp } from "./worker/index.ts";
 
 /**
  * Vercel serverless entry. The optional catch-all route file serves /api and

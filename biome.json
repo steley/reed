@@ -35,7 +35,8 @@
       "!**/dist",
       "!**/.wrangler",
       "!**/drizzle",
-      "!**/pnpm-lock.yaml"
+      "!**/pnpm-lock.yaml",
+      "!api/**"
     ]
   },
   "css": {

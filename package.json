@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "pnpm --filter @cloud-reader/worker dev",
     "build": "pnpm --filter @cloud-reader/app build",
+    "build:api": "pnpm --filter @cloud-reader/worker exec esbuild src/vercel-entry.ts --bundle --platform=node --format=cjs --target=node20 --banner:js=\"/* GENERATED FILE - do not edit. Source: packages/worker/src/vercel-entry.ts. Regenerate with: pnpm build:api */\" --outfile=../../api/[[...route]].js",
     "deploy": "vercel deploy --prod",
     "test": "pnpm -r run test",
     "test:run": "pnpm -r run test:run",
-    "type-check": "pnpm -r run type-check && tsc -p api",
+    "type-check": "pnpm -r run type-check",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "prepare": "husky"
