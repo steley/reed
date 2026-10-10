@@ -57,7 +57,7 @@ export function FeedSidebar({
       >
         {/* Wordmark */}
         <div className="flex items-center gap-2 px-5 pb-4 pt-5">
-          <ReedMark width={18} height={18} />
+          <ReedMark width={22} height={22} />
           <span className="text-[15px] font-semibold tracking-tight">Reed</span>
         </div>
 

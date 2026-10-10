@@ -933,3 +933,23 @@ stems to 8px, narrowed plumes and unified the lean — reads as reeds down to
 ### Gotchas
 - Vite copies `public/` verbatim; file contents are fine — only the HTML
   references needed the bust.
+
+---
+
+## Increment — ReedMark weight + size bump
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was done
+- User: sidebar mark "too faint, too small". Confirmed via Playwright
+  screenshot of local dev (8787 API + Vite 5173, seeded local.db): at 18px
+  with 1.7px strokes the mark read as a faint smudge next to the bold
+  wordmark.
+- Redrew ReedMark: strokeWidth 1.7→2.2, ground 1.5→1.8, default size 18→20,
+  plumes enlarged and swept further right. Sidebar renders it at 22px.
+- Verified with a 6x element screenshot — stems read as ink, plumes visible.
+
+### Gotchas
+- drizzle-kit `turso` dialect refuses `file:` URLs with empty authToken, so
+  the local dev db can't be migrated via `pnpm db:migrate`; applied
+  `drizzle/*.sql` straight with sqlite3 instead. local.db is gitignored.
