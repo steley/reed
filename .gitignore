@@ -22,5 +22,8 @@ dist/
 .vscode/
 .idea/
 
+# Agent workspace notes (local only, never commit)
+.workbuddy/
+
 # Vitest
 coverage/
