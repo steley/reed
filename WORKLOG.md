@@ -914,3 +914,22 @@ stems to 8px, narrowed plumes and unified the lean — reads as reeds down to
 - `docs/` didn't exist; created it. Screenshot contains the user's own feed
   list (public HN/少数派 titles) — accepted by the user when requesting the
   public-README embed; re-shoot if they ever add private feeds.
+
+---
+
+## Increment — favicon cache-busting
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was done
+- User reported the tab still showed the old RSS icon. Verified production:
+  live `/favicon.svg` and `/favicon.png` md5-match the local build — the new
+  reed logo IS deployed. Root cause: browser favicon cache (favicons are
+  cached aggressively and often survive hard reload).
+- Fix: appended `?v=2` to the three icon links in `index.html` so browsers
+  treat the URL as changed and refetch. Bump the version on any future icon
+  change.
+
+### Gotchas
+- Vite copies `public/` verbatim; file contents are fine — only the HTML
+  references needed the bust.

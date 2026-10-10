@@ -1,6 +1,6 @@
 import type { Feed } from "@reed/types";
 import { avatarColor, feedDisplayName } from "../lib/display.ts";
-import { Moon, Plus, RssLogo, Sun, Trash } from "./icons.tsx";
+import { Moon, Plus, ReedMark, Sun, Trash } from "./icons.tsx";
 
 interface Props {
   feeds: Feed[];
@@ -57,7 +57,7 @@ export function FeedSidebar({
       >
         {/* Wordmark */}
         <div className="flex items-center gap-2 px-5 pb-4 pt-5">
-          <RssLogo className="text-accent" width={18} height={18} />
+          <ReedMark width={18} height={18} />
           <span className="text-[15px] font-semibold tracking-tight">Reed</span>
         </div>
 

@@ -14,11 +14,28 @@ const base = (props: P) => ({
   ...props,
 });
 
-export const RssLogo = (props: P) => (
-  <svg {...base(props)} strokeWidth={2.2}>
-    <path d="M4 11a9 9 0 0 1 9 9" />
-    <path d="M4 4a16 16 0 0 1 16 16" />
-    <circle cx="5" cy="19" r="1.6" fill="currentColor" stroke="none" />
+/** Brand mark: three wind-swept reeds. Ember plumes on ink stems (theme-aware). */
+export const ReedMark = (props: P) => (
+  <svg
+    width={18}
+    height={18}
+    viewBox="0 0 24 24"
+    fill="none"
+    strokeLinecap="round"
+    aria-hidden
+    {...props}
+  >
+    <g stroke="var(--color-ink)" strokeWidth={1.7}>
+      <path d="M5.8 20.5 C6 18.7 6.4 17 6.7 15.7" />
+      <path d="M9.8 20.5 C9.6 16.4 9.7 12.6 9.8 9.3" />
+      <path d="M13.6 20.5 C13.9 17.7 14.1 14.6 14.3 12.1" />
+    </g>
+    <path d="M4.5 21 H19.5" stroke="var(--color-ink-3)" strokeWidth={1.5} />
+    <g fill="var(--color-accent)">
+      <path d="M6.6 15.6 C6.4 14.3 6.8 13.1 8 12.2 C8.2 13.5 7.7 14.6 6.6 15.6 Z" />
+      <path d="M9.75 9.4 C9.5 7.5 9.9 5.7 11.6 4.4 C11.9 6.4 11.2 8 9.75 9.4 Z" />
+      <path d="M14.3 12 C14.1 10.5 14.5 9.1 16 8.1 C16.2 9.7 15.7 11 14.3 12 Z" />
+    </g>
   </svg>
 );
 
