@@ -58,7 +58,7 @@ reed/
 ├── pnpm-workspace.yaml       # Declares packages/*
 ├── tsconfig.json             # Root: base TS config, extended by all packages
 ├── vercel.json               # Vercel build config + SPA fallback rewrites
-├── api/                      # Vercel serverless entry ([[...route]].ts → hono/vercel handle)
+├── api/                      # GENERATED serverless bundle (pnpm build:api) — do not edit
 ├── .github/workflows/        # refresh.yml — hourly feed refresh into Turso
 ├── AGENTS.md                 # This file
 ├── WORKLOG.md                # Increment-by-increment build log (agent memory)
@@ -125,10 +125,24 @@ without any translation layer. All endpoints return JSON.
 
 ### Vercel serves the frontend + API from one project
 The React app is built to `packages/app/dist/` by Vite and set as
-`outputDirectory` in `vercel.json`; the API is the optional catch-all function
-`api/[[...route]].ts` which adapts the Hono app via `hono/vercel`'s `handle()`.
-Routes are defined with full paths (`/api/feeds`) so no basePath juggling is
-needed. A rewrite sends all non-`/api` paths to `/index.html` (SPA fallback).
+`outputDirectory` in `vercel.json`; the API is the serverless function
+`api/index.js` (see "Pre-bundled API function" below). Routes are defined with
+full paths (`/api/feeds`) so no basePath juggling is needed. A rewrite sends
+all non-`/api` paths to `/index.html` (SPA fallback).
+
+### Pre-bundled API function (`api/index.js`)
+`api/index.js` is a GENERATED file — a self-contained CJS bundle of
+`packages/worker/src/vercel-entry.ts` (the Hono app adapted via `hono/vercel`'s
+`handle()`), built by `pnpm build:api` with esbuild. It is committed because
+Vercel's own bundling pipeline crashed at module load on CJS transitive deps of
+`@libsql/client` even with the pnpm patches in place (full diagnosis in
+WORKLOG).
+- Never hand-edit it. Change `packages/worker`, run `pnpm build:api`, and
+  commit the regenerated bundle.
+- The build is deterministic (no source change → byte-identical output), and
+  biome excludes `api/**`, so lint-staged never reformats the bundle.
+- The pre-commit hook regenerates and diffs the bundle, failing the commit if
+  the committed copy is stale.
 
 ### Shared types package
 `@reed/types` contains the canonical `Feed` and `Article` interfaces.
@@ -138,6 +152,16 @@ All packages import from here. Never define these types inline in worker or app 
 Schema changes go through `drizzle-kit generate` (produces SQL in `packages/worker/drizzle/`)
 then `drizzle-kit migrate` against Turso (`TURSO_*` env vars). Never manually
 edit generated migration files.
+
+### Dependency patches (`patches/`)
+pnpm `patchedDependencies` in the root `package.json` carries three
+version-exact patches, all serving the Vercel serverless runtime (upstream had
+no fix as of `@libsql/client` 0.18): `@libsql/isomorphic-ws` and
+`@libsql/hrana-client` swap CJS `ws`/`cross-fetch` imports for Node's global
+`fetch`/`WebSocket`; `drizzle-orm` makes the libsql driver import
+`@libsql/client/web`. Patch pins include exact versions — bumping any of these
+packages means updating the pins and re-verifying the patches. See WORKLOG for
+the full diagnosis.
 
 ---
 
@@ -243,6 +267,9 @@ repository secrets; locally they can be exported in the shell or set per-command
 Husky runs on every commit:
 1. **lint-staged** — biome lint + format on staged `*.ts/tsx/js/jsx` files only
 2. **type-check** — `tsc --noEmit` across all packages
+3. **API bundle check** — regenerates `api/index.js` via `pnpm build:api` and
+   fails the commit if the committed copy is stale (`git diff --exit-code`).
+   Fix: run `pnpm build:api`, stage `api/index.js`, commit again.
 
 To run manually:
 ```bash

@@ -953,3 +953,46 @@ stems to 8px, narrowed plumes and unified the lean — reads as reeds down to
 - drizzle-kit `turso` dialect refuses `file:` URLs with empty authToken, so
   the local dev db can't be migrated via `pnpm db:migrate`; applied
   `drizzle/*.sql` straight with sqlite3 instead. local.db is gitignored.
+
+---
+
+## Increment — Repo legibility: bundle docs, stale refs, drift check
+**Date:** 2026-10-11
+**Status:** Complete
+
+### Why
+User cloned the repo fresh and found it confusing. Audit showed the structure
+itself is fine (standard pnpm monorepo); the confusion came from three fixable
+things: a 464 KB generated `api/index.js` at the root with nothing pointing at
+its source (the why lives only mid-WORKLOG), stale doc claims (README stack
+table still listed the removed @cloudflare/kumo; AGENTS.md described the
+removed `api/[[...route]].ts` catch-all), and an unexplained `patches/` dir.
+
+### What was done
+- README: stack table kumo → hand-rolled + Tailwind v4; structure tree marks
+  `api/` as generated; deployment section explains the pre-bundled function
+  and the regenerate-and-commit workflow.
+- AGENTS.md: `api/` tree entry + "Vercel serves…" decision updated to the
+  bundle reality; new "Pre-bundled API function" and "Dependency patches"
+  decision sections; pre-commit hook list gains the bundle step.
+- Pre-commit hook: regenerate the bundle (`pnpm build:api`) and fail on
+  `git diff --exit-code api/index.js`, catching a stale committed bundle.
+
+### Options considered and discarded
+- Stop committing the bundle and build it in `vercel.json` buildCommand —
+  cleanest repo (no 464 KB blob in git) but changes deploy behaviour that
+  currently works; conservative option (keep + verify) chosen. Revisit if
+  bundle churn gets annoying.
+- Rename `packages/worker` → `packages/api` (the name is a Cloudflare-era
+  leftover). Deferred: 18 refs across 5 files incl. the Actions workflow;
+  mechanical but deploy-touching for a cosmetic gain.
+
+### Gotchas
+- Verified first that `pnpm build:api` is deterministic (rebuild produced a
+  byte-identical `api/index.js`) and that biome excludes `api/**` — otherwise
+  lint-staged would reformat the bundle and permanently break the drift check.
+- `git diff --exit-code` (worktree vs index) is the right comparison: it
+  catches both "regenerated but not staged" and "stale copy staged".
+- The husky wrapper runs hooks under `sh -e`, so a failed `pnpm build:api`
+  aborts the commit on its own; the explicit `exit 1` covers the diff
+  mismatch path.

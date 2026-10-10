@@ -1,6 +1,13 @@
 #!/usr/bin/env sh
-# Run biome lint+format on staged files, type-check, and tests
+# Run biome lint+format on staged files, type-check, tests, and API bundle check
 
 pnpm lint-staged
 pnpm type-check
 pnpm test:run
+
+# Regenerate the API bundle and fail if the committed copy is stale
+pnpm build:api
+if ! git diff --exit-code api/index.js; then
+  echo "api/index.js is stale — run 'pnpm build:api' and stage it." >&2
+  exit 1
+fi
