@@ -49,6 +49,31 @@ describe("extractFullText", () => {
     expect(content).toContain('href="https://blog.example.com/about"');
   });
 
+  it("keeps content around a long quoted section (blockquote unwrapping)", async () => {
+    // Regression: Readability scores paragraphs by container, so a long
+    // statement inside a <blockquote> out-competed the article body and the
+    // surrounding prose was dropped.
+    const longQuote = Array.from(
+      { length: 6 },
+      (_, i) =>
+        `<p>Quoted statement paragraph ${i} with plenty of text so the blockquote scores as a candidate container.</p>`,
+    ).join("\n");
+    const page = `<!doctype html><html><body><article>
+      <p>中文导语：这里有一句重要的开场白。</p>
+      <blockquote>${longQuote}</blockquote>
+      <h2>原因与过程</h2>
+      <p>正文分析第一段，包含事情的来龙去脉与后续影响，长度足够被视为正文。</p>
+      <p>正文分析第二段，收束全文并给出结论性的观察，同样足够长。</p>
+    </article></body></html>`;
+    vi.mocked(fetch).mockResolvedValue(new Response(page, { status: 200 }));
+
+    const content = await extractFullText("https://blog.example.com/post");
+    expect(content).toContain("中文导语");
+    expect(content).toContain("Quoted statement paragraph 0");
+    expect(content).toContain("原因与过程");
+    expect(content).toContain("结论性的观察");
+  });
+
   it("returns null on HTTP failure", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("nope", { status: 404 }));
     expect(await extractFullText("https://blog.example.com/post")).toBeNull();

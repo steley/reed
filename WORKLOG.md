@@ -2077,3 +2077,27 @@ unit tests pass; DB tests still skipped locally (no TEST_DATABASE_URL).
 After deploying, re-run `pnpm --filter @reed/worker backfill` once — any
 article whose extracted content was already wiped by a cron run gets
 re-extracted (its content is NULL again).
+
+### Fix en route: long quoted sections dropped from extracted full text (2026-10-11)
+Report via httpsmail.com's Autistici-shutdown post: the extracted full text
+kept only the page's long English source statement, dropping the Chinese
+intro line before it and the entire 原因与过程 analysis section after it.
+
+Root cause: Readability scores paragraphs by their container. That page is
+intro `<p>` + giant `<blockquote>` (quoted source, many long `<p>`s) +
+analysis `<h2>`/`<p>`s, all siblings under `<article>`. The blockquote's
+paragraphs gave their container (the blockquote) a higher score than the
+article, so Readability promoted the quote alone and discarded its siblings
+— measured on the real page: 2431 of 2832 chars kept, and the missing
+chars were exactly the Chinese prose.
+
+Fix: `unwrapBlockquotes()` in `lib/extract.ts` — before Readability runs,
+every blockquote's children are moved up to its parent and the element
+removed. All paragraphs (quoted or not) then score on the real content
+container, so nothing competes with the article body. Verified against the
+fetched page: intro, full quote and tail all present. Discarded: a
+coverage-fallback (use the `<article>` element when Readability kept less
+than N% of its text) — the ratio was 0.86 on this page, so any threshold
+that catches it also fires on pages where Readability legitimately stripped
+noise. Trade-off: the quote loses its blockquote styling in the reader
+(flat paragraphs) — accepted, completeness beats indent formatting.

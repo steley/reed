@@ -31250,10 +31250,19 @@ function absolutizeUrls(html, baseUrl) {
   }
   return document2.body.innerHTML;
 }
+function unwrapBlockquotes(document2) {
+  for (const bq of [...document2.querySelectorAll("blockquote")]) {
+    const parent = bq.parentNode;
+    if (!parent) continue;
+    while (bq.firstChild) parent.insertBefore(bq.firstChild, bq);
+    bq.remove();
+  }
+}
 async function extractFullText(url) {
   try {
     const html = await fetchWithGuards(url, ACCEPT_HTML);
     const { document: document2 } = parseHTML(html);
+    unwrapBlockquotes(document2);
     const parsed = new import_readability.Readability(document2).parse();
     const content = parsed?.content?.trim();
     if (!content) return null;
