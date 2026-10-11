@@ -163,6 +163,7 @@ export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult
       description: parsed.meta.description ?? feed.description,
       imageUrl: parsed.meta.imageUrl ?? feed.imageUrl,
       lastFetchedAt: Date.now(),
+      lastError: null,
     })
     .where(eq(feeds.id, feedId));
 

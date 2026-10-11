@@ -158,6 +158,11 @@ feedsRouter.post("/:id/refresh", async (c) => {
     return c.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Refresh failed";
+    // Same failure surfacing the hourly cron does — sidebar error dot
+    await db
+      .update(feeds)
+      .set({ lastError: message.slice(0, 500) })
+      .where(eq(feeds.id, id));
     return c.json({ error: message }, 502);
   }
 });

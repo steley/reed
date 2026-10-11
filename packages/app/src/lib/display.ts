@@ -71,6 +71,18 @@ export function compareNames(a: string, b: string): number {
   return a.localeCompare(b, undefined, { sensitivity: "base" });
 }
 
+/**
+ * The article list's display order (publishedAt, newest/oldest first).
+ * Shared with App's keyboard navigation so j/k walks the exact visible order.
+ */
+export function sortArticles<T extends { publishedAt: number | null }>(
+  list: T[],
+  asc: boolean,
+): T[] {
+  const av = (a: T) => a.publishedAt ?? 0;
+  return [...list].sort((a, b) => (asc ? av(a) - av(b) : av(b) - av(a)));
+}
+
 const AVATAR_HUES = [14, 32, 95, 150, 172, 200, 225, 262, 290, 330];
 
 /** Deterministic muted hue for a feed's letter avatar. */

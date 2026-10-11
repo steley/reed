@@ -26,6 +26,8 @@ export interface Feed {
   imageUrl: string | null;
   folderId: string | null;
   lastFetchedAt: number | null;
+  /** Last refresh failure message; null = last refresh succeeded (or never ran). */
+  lastError: string | null;
   createdAt: number;
 }
 

@@ -19868,6 +19868,7 @@ var feeds = pgTable(
     imageUrl: text("image_url"),
     folderId: text("folder_id").references(() => folders.id, { onDelete: "set null" }),
     lastFetchedAt: bigint("last_fetched_at", { mode: "number" }),
+    lastError: text("last_error"),
     createdAt: bigint("created_at", { mode: "number" }).notNull()
   },
   (table) => [
@@ -31540,7 +31541,8 @@ async function refreshFeed(feedId, db2) {
     siteUrl: parsed.meta.siteUrl ?? feed.siteUrl,
     description: parsed.meta.description ?? feed.description,
     imageUrl: parsed.meta.imageUrl ?? feed.imageUrl,
-    lastFetchedAt: Date.now()
+    lastFetchedAt: Date.now(),
+    lastError: null
   }).where(eq(feeds.id, feedId));
   const pending = [];
   for (const article of parsed.articles) {
@@ -31691,6 +31693,7 @@ feedsRouter.post("/:id/refresh", async (c) => {
     return c.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Refresh failed";
+    await db2.update(feeds).set({ lastError: message.slice(0, 500) }).where(eq(feeds.id, id));
     return c.json({ error: message }, 502);
   }
 });

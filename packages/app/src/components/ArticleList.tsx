@@ -1,5 +1,12 @@
 import type { ArticleListItem, Feed } from "@reed/types";
-import { cleanSummary, feedDisplayName, highlightParts, relativeTime } from "../lib/display.ts";
+import { useEffect } from "react";
+import {
+  cleanSummary,
+  feedDisplayName,
+  highlightParts,
+  relativeTime,
+  sortArticles,
+} from "../lib/display.ts";
 import { Filter, MarkAllRead, Menu, Refresh, Sort } from "./icons.tsx";
 
 /** Render `text` with the search tokens wrapped in <mark>. */
@@ -60,12 +67,16 @@ export function ArticleList({
   onMarkAllRead,
   onRefresh,
 }: Props) {
-  const sorted = [...articles].sort((a, b) => {
-    const av = a.publishedAt ?? 0;
-    const bv = b.publishedAt ?? 0;
-    return sortAsc ? av - bv : bv - av;
-  });
+  const sorted = sortArticles(articles, sortAsc);
   const hasUnread = articles.some((a) => a.read === 0);
+
+  // Keep the selected card visible when keyboard navigation moves the selection
+  useEffect(() => {
+    if (!selectedArticleId) return;
+    document
+      .querySelector(`[data-article-id="${selectedArticleId}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selectedArticleId]);
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-canvas">
@@ -157,6 +168,7 @@ export function ArticleList({
                 <li key={article.id}>
                   <button
                     type="button"
+                    data-article-id={article.id}
                     onClick={() => onSelectArticle(article.id)}
                     className={`relative block w-full border-b border-line/70 px-4 py-3.5 text-left transition-colors md:px-5 ${
                       selected ? "bg-card" : "hover:bg-card/50"

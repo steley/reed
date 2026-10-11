@@ -39,6 +39,7 @@ export const feeds = pgTable(
     imageUrl: text("image_url"),
     folderId: text("folder_id").references(() => folders.id, { onDelete: "set null" }),
     lastFetchedAt: bigint("last_fetched_at", { mode: "number" }),
+    lastError: text("last_error"),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (table) => [

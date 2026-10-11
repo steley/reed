@@ -128,6 +128,10 @@ function FeedRow({
       >
         <Avatar feed={feed} />
         <span className="truncate">{name}</span>
+        {feed.lastError ? (
+          // Refresh-failure marker; hover for the message (same text as the cron log)
+          <span title={feed.lastError} className="size-1.5 shrink-0 rounded-full bg-danger" />
+        ) : null}
       </button>
       {unread > 0 ? (
         <span className="min-w-4 text-right text-xs font-medium text-accent tabular-nums">

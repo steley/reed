@@ -2216,3 +2216,64 @@ grows past the pane without ever scrolling.
   everything, and the server filter composes with search for free.
 - Persisting the toggle in localStorage: rejected for now — default-unread is
   the requested default; add persistence if it annoys.
+
+## Increment — Keyboard navigation + feed refresh-failure visibility
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was built
+- **Keyboard navigation:** global `keydown` listener in App — `j` / `ArrowDown`
+  = next article, `k` / `ArrowUp` = previous, both directions wrap-free
+  (stops at the ends; nothing selected yet → `j` starts at the top, `k` at the
+  bottom). Ignored while focus is in an input/textarea/contenteditable and
+  while any dialog (add feed, import OPML, folder name) is open, and when a
+  modifier key is held (so browser shortcuts like Cmd+ArrowDown still work).
+  Selection goes through `handleSelectArticle`, so auto-mark-read applies.
+  The list scrolls the selected card into view (`scrollIntoView({ block:
+  "nearest" })`, keyed off a `data-article-id` attribute on each card button).
+- **Refresh-failure visibility:** new `feeds.last_error` text column
+  (migration `0003_organic_frightful_four.sql` — see gotcha below). `refreshFeed()`
+  clears it on success (`lastError: null` in the metadata update); `runCron()`
+  and `POST /api/feeds/:id/refresh` write it (capped at 500 chars) in their
+  failure paths. `Feed` type gains `lastError: string | null`. The sidebar
+  feed row renders a small red dot (`--color-danger`, new semantic token)
+  with the error message as `title` tooltip.
+
+### Decisions made
+- **Failure written at the call sites, not inside `refreshFeed()`:** the
+  function's contract is "throws on failure"; the two callers (cron, manual
+  refresh route) already catch, so recording there is the smallest diff.
+  Success-clearing lives inside `refreshFeed()` because every success path
+  routes through the same metadata update.
+- **Sort order shared:** extracted `sortArticles()` into `lib/display.ts`;
+  ArticleList and the keydown handler both use it — j/k must walk the exact
+  visible order or navigation feels broken. Duplicate sort logic was the
+  drift risk.
+- **`last_error` capped at 500 chars:** a pathological parser message
+  shouldn't bloat every row of the feeds list payload.
+- **Red dot, not a banner:** personal scale — one broken feed deserves a
+  glanceable marker with a hover tooltip, not a modal or a banner.
+
+### Options considered and discarded
+- Storing failure state client-side (derive from the 502 of manual refresh):
+  rejected — the hourly cron failures (the common case) never reach the SPA.
+- A separate `feed_errors` table with history: rejected — last failure only
+  is what the UI needs; history lives in the Actions logs.
+
+### Gotchas
+- **`drizzle-kit generate` replays hand-written migrations:** the hand-written
+  `0002_multiuser.sql` has no drizzle snapshot (`meta/` only has snapshots for
+  generated migrations), so the generated 0003 re-emitted the entire multiuser
+  DDL (`CREATE TABLE users`, `ADD COLUMN user_id` NOT NULL, constraint drops…)
+  which would fail against the already-migrated production DB. Fix: kept the
+  generated snapshot (it is now current, so future generates are clean) but
+  reduced the SQL file to the single `ALTER TABLE "feeds" ADD COLUMN
+  "last_error" text;`. AGENTS.md's "never manually edit generated migrations"
+  is overridden here by the same exception class as 0002 — the generated
+  output was wrong because of a hand-written sibling. Watch for this again if
+  another hand-written migration is ever added without a snapshot.
+- `flatMap` with an async callback silently returns an array of Promises —
+  `runCron()` failure recording is a sequential for-loop instead.
+- Feed titles come from the feed itself and are overwritten on every refresh
+  (`refresh.ts`), so a "Rename feed" feature would need a title-override
+  column; deliberately skipped as YAGNI.

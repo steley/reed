@@ -15,6 +15,7 @@ import {
   opmlApi,
   setOnUnauthorized,
 } from "./lib/api.ts";
+import { sortArticles } from "./lib/display.ts";
 
 const THEME_KEY = "reed-theme";
 
@@ -301,6 +302,47 @@ export function App() {
     setSelectedFeedId(id);
     setSidebarOpen(false);
   }, []);
+
+  // Keyboard navigation: j / ArrowDown = next article, k / ArrowUp = previous,
+  // walking the exact visible list order (sortArticles). Skipped while typing
+  // or when a dialog is open. No j/k on the sidebar — articles only, per j/k
+  // reader convention.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "j" && e.key !== "k" && e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+      ) {
+        return;
+      }
+      if (addFeedOpen || importOpmlOpen || folderDialog) return;
+      const sorted = sortArticles(articles, sortAsc);
+      const idx = sorted.findIndex((a) => a.id === selectedArticleId);
+      // Nothing selected yet: j starts at the top, k at the bottom
+      const next =
+        idx === -1
+          ? e.key === "j" || e.key === "ArrowDown"
+            ? sorted[0]
+            : sorted.at(-1)
+          : e.key === "j" || e.key === "ArrowDown"
+            ? sorted[idx + 1]
+            : sorted[idx - 1];
+      if (next) handleSelectArticle(next.id);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    articles,
+    selectedArticleId,
+    sortAsc,
+    addFeedOpen,
+    importOpmlOpen,
+    folderDialog,
+    handleSelectArticle,
+  ]);
 
   const handleAddFolder = useCallback(async (name: string) => {
     const folder = await foldersApi.create({ name });

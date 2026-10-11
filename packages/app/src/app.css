@@ -14,6 +14,7 @@
   --color-ink-3: light-dark(#a8a39b, #6e6a64);
   --color-accent: light-dark(#d9480f, #ff8a3d);
   --color-accent-soft: light-dark(#fbe4d8, #3d2417);
+  --color-danger: light-dark(#c92a2a, #ff6b6b);
 }
 
 html,
