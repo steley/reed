@@ -215,8 +215,10 @@ describe("refreshFeed", () => {
 
     const result = await refreshFeed(FEED_ID, db);
 
+    // Feed XML (2 calls incl. redirect) + full-text fetches for both new
+    // articles (feed provided no substantial content)
     expect(result.added).toBe(2);
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(4);
     expect(vi.mocked(fetch).mock.calls[1]![0]).toBe("https://blog.example.com/moved.xml");
   });
 
@@ -230,6 +232,44 @@ describe("refreshFeed", () => {
 
     await expect(refreshFeed(FEED_ID, db)).rejects.toThrow("private");
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches full text for new articles the feed only summarizes", async () => {
+    const page = `<!doctype html><html><body><article>
+      <h1>Post Body</h1>
+      ${Array.from({ length: 6 }, (_, i) => `<p>Full text paragraph ${i} with plenty of text so readability keeps it.</p>`).join("\n")}
+    </article></body></html>`;
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.toString();
+      return new Response(url === FEED_URL ? RSS_XML : page, { status: 200 });
+    });
+
+    const result = await refreshFeed(FEED_ID, db);
+    expect(result.added).toBe(2);
+
+    const stored = await db
+      .select()
+      .from(articles)
+      .where(eq(articles.url, "https://blog.example.com/two"))
+      .limit(1);
+    expect(stored[0]!.content).toContain("Full text paragraph 0");
+  });
+
+  it("keeps feed-provided content when full-text extraction fails", async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const body = url === FEED_URL ? RSS_XML : "Not Found";
+      return new Response(body, { status: url === FEED_URL ? 200 : 404 });
+    });
+
+    await refreshFeed(FEED_ID, db);
+
+    const stored = await db
+      .select()
+      .from(articles)
+      .where(eq(articles.url, "https://blog.example.com/one"))
+      .limit(1);
+    expect(stored[0]!.content).toBe("<p>Content one</p>");
   });
 
   it("stores article rows per feed — two feeds may carry the same article URL", async () => {

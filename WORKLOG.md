@@ -1952,3 +1952,39 @@ no fetch probing, the browser does the work. Discarded: favicon-proxy
 services (Google s2 is unreachable from mainland China) and server-side
 favicon scraping on refresh (extra fetch per feed per hour for marginal
 coverage beyond `favicon.ico`).
+
+### Full-text fetch for excerpt-only feeds (2026-10-11)
+Many feeds ship only a summary (`description` / Atom `summary`), leaving
+`articles.content` null and the reader showing a stub. The fulltext pipeline
+now fetches the article page and stores the extracted body — no schema
+change, no API change, no frontend change (the reader already renders
+`content` and falls back to summary).
+
+How it works (`lib/extract.ts`, `lib/refresh.ts`):
+- `extractFullText(url)` fetches the article page and extracts main content
+  with `@mozilla/readability` over `linkedom` (jsdom was rejected: far heavier,
+  and the Vercel bundle budget matters). Any failure — network, 404,
+  non-HTML, unextractable page — returns null; the feed-provided summary
+  remains the body. Same SSRF guardrails as feeds: the redirect/revalidate
+  loop was factored out of `fetchFeedXml` into an exported
+  `fetchWithGuards(url, accept)` shared by both callers.
+- `refreshFeed()` resolves which articles are new (existence select moved
+  ahead of the write loop), then prefetches fulltext for **new articles
+  only** where feed-provided body (`content ?? summary`) is under 500 chars
+  (`MIN_FULLTEXT_CHARS`) — a long summary counts as readable body, so most
+  text feeds skip fetching entirely. Concurrency pool of 4
+  (`FULLTEXT_POOL`) so a 50-item first sync doesn't serialize ten 10s
+  timeouts against one dead host. Extracted HTML is stored into the existing
+  `content` column; upsert of existing articles never refetches (hourly cron
+  must not re-crawl the web).
+- Publisher-provided short `content:encoded` is treated as excerpt too and
+  gets replaced by the extracted page body when extraction succeeds.
+
+Gotchas:
+- `refresh.test.ts`'s redirect-hop test now sees 4 fetches, not 2 (feed XML
+  ×2 + fulltext ×2) — the mock returns the RSS body for article pages, which
+  Readability can't extract, so stored content is unchanged.
+- DB tests still skipped locally (no `TEST_DATABASE_URL` in this shell);
+  extract/refresh unit tests cover the new logic without a DB.
+- Readability mutates the document it parses — fine here, parseHTML output
+  is one-shot.

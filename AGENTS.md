@@ -91,6 +91,7 @@ reed/
 | ORM | Drizzle ORM + drizzle-kit | Type-safe queries, `postgresql` dialect for migrations |
 | HTTP router | Hono | Lightweight, typed routing; `app.request()` enables clean unit tests; `hono/vercel` adapter for the serverless entry |
 | RSS parsing | `fast-xml-parser` | Pure JS, no native deps, handles RSS 2.0 + Atom |
+| Full-text extraction | `@mozilla/readability` + `linkedom` | Firefox reader mode over a lightweight DOM (jsdom rejected: too heavy for the serverless bundle) — fetches article pages when a feed only summarizes |
 | Markdown rendering | `marked` | Converts markdown content to HTML for feeds that provide markdown bodies |
 | Frontend | React 19 + Vite | Standard SPA setup |
 | UI components | Hand-rolled + Tailwind v4 | Reeder-style minimal UI; no component library (removed 2026-10-10) |
@@ -303,6 +304,25 @@ calls `runCron()` — `refreshFeed()` for every feed in Neon, using
 returns the failures; the script logs each one to stderr and sets
 `process.exitCode = 1` when any feed failed, so a broken feed turns the
 Actions run red instead of silently passing forever.
+
+### Full-text fetch (2026-10-11)
+Feeds that only summarize leave `articles.content` null; `refreshFeed()` fills
+it in. For **new articles only**, when the feed-provided body
+(`content ?? summary`) is under `MIN_FULLTEXT_CHARS` (500 chars — a long
+summary counts as a readable body and skips fetching), `extractFullText()`
+(`lib/extract.ts`) fetches the article page and extracts main content with
+`@mozilla/readability` over `linkedom`, storing the HTML into the existing
+`content` column. No schema/API/frontend change — the reader already renders
+`content` and falls back to summary-derived content. Rules of the road:
+- Only new articles are crawled; upserting an existing article never
+  refetches. Do not widen this to every refresh — the hourly cron must not
+  re-crawl the web.
+- Article-page fetches share the feed fetch's SSRF guardrails via the
+  exported `fetchWithGuards(url, accept)` (the redirect/revalidate loop
+  factored out of `fetchFeedXml`). Never fetch an untrusted URL without it.
+- Extraction failure is silent (`null`) — the summary fallback is the design,
+  not an error path. Prefetch runs in a pool of 4 (`FULLTEXT_POOL`) so a
+  50-item first sync doesn't serialize timeouts against one dead host.
 
 ### Feed fetch guardrails (SSRF)
 Feed URLs are untrusted input (anyone who can reach the unauthenticated API can

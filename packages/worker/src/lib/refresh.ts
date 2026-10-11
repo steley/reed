@@ -1,14 +1,20 @@
 import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
 import { and, eq } from "drizzle-orm";
-import type { RefreshResult } from "@reed/types";
+import type { ParsedArticle, RefreshResult } from "@reed/types";
 import type { DB } from "../db/client.ts";
 import { articles, feeds } from "../db/schema.ts";
+import { extractFullText } from "./extract.ts";
 import { parseFeed } from "./parse.ts";
 
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 5_000_000;
 const MAX_REDIRECTS = 5;
+// Feed-provided body (content, or summary as fallback) shorter than this is
+// treated as excerpt-only — fetch the article page for the full text.
+const MIN_FULLTEXT_CHARS = 500;
+// Concurrent article-page fetches during full-text prefetch.
+const FULLTEXT_POOL = 4;
 
 /**
  * Validate a feed URL's scheme. Called at feed-insert time (400 to the client)
@@ -62,7 +68,7 @@ async function assertPublicHost(hostname: string): Promise<void> {
 async function readBodyWithLimit(response: Response, url: string): Promise<string> {
   const declared = Number(response.headers.get("content-length") ?? 0);
   if (declared > MAX_RESPONSE_BYTES) {
-    throw new Error(`Feed response from ${url} exceeds ${MAX_RESPONSE_BYTES} byte limit`);
+    throw new Error(`Response from ${url} exceeds ${MAX_RESPONSE_BYTES} byte limit`);
   }
   const reader = response.body?.getReader();
   if (!reader) return "";
@@ -75,19 +81,21 @@ async function readBodyWithLimit(response: Response, url: string): Promise<strin
     total += value.byteLength;
     if (total > MAX_RESPONSE_BYTES) {
       await reader.cancel();
-      throw new Error(`Feed response from ${url} exceeds ${MAX_RESPONSE_BYTES} byte limit`);
+      throw new Error(`Response from ${url} exceeds ${MAX_RESPONSE_BYTES} byte limit`);
     }
     text += decoder.decode(value, { stream: true });
   }
   return text + decoder.decode();
 }
 
+const FEED_ACCEPT = "application/rss+xml, application/atom+xml, application/xml, text/xml, */*";
+
 /**
- * Fetch the feed XML with SSRF guardrails: scheme + public-host validation on
- * every hop (redirects re-validated), per-request timeout, capped redirects
- * and response size.
+ * Fetch a URL as text with SSRF guardrails: scheme + public-host validation
+ * on every hop (redirects re-validated), per-request timeout, capped
+ * redirects and response size. Shared by feed XML and article-page fetches.
  */
-async function fetchFeedXml(url: string): Promise<string> {
+export async function fetchWithGuards(url: string, accept: string): Promise<string> {
   let target = url;
   for (let hop = 0; ; hop++) {
     assertFetchableUrl(target);
@@ -96,7 +104,7 @@ async function fetchFeedXml(url: string): Promise<string> {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
+        Accept: accept,
       },
       redirect: "manual",
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -111,10 +119,15 @@ async function fetchFeedXml(url: string): Promise<string> {
       continue;
     }
     if (!response.ok) {
-      throw new Error(`Failed to fetch feed ${target}: ${response.status} ${response.statusText}`);
+      throw new Error(`Failed to fetch ${target}: ${response.status} ${response.statusText}`);
     }
     return readBodyWithLimit(response, target);
   }
+}
+
+/** Fetch feed XML (SSRF-guarded) for parsing. */
+function fetchFeedXml(url: string): Promise<string> {
+  return fetchWithGuards(url, FEED_ACCEPT);
 }
 
 /**
@@ -155,27 +168,54 @@ export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult
 
   // Upsert articles. articles are unique per (feed_id, url): two users
   // subscribing to the same feed URL each keep their own article rows.
-  let added = 0;
-  let updated = 0;
-
+  // Existence is resolved first so full text can be prefetched for exactly
+  // the new articles that need it.
+  const pending: { article: ParsedArticle; existingId: string | null }[] = [];
   for (const article of parsed.articles) {
     if (!article.url) continue;
-
     const existingRows = await db
       .select({ id: articles.id })
       .from(articles)
       .where(and(eq(articles.feedId, feedId), eq(articles.url, article.url)))
       .limit(1);
-    const existing = existingRows[0];
+    pending.push({ article, existingId: existingRows[0]?.id ?? null });
+  }
 
-    if (!existing) {
+  // Full-text prefetch: only new articles where the feed gave neither content
+  // nor a substantial summary. Pool of 4 so a first sync of 50 items doesn't
+  // serialize ten 10s timeouts against one dead site.
+  const extracted = new Map<string, string>();
+  const candidates = pending.filter(
+    ({ article, existingId }) =>
+      existingId === null &&
+      (article.content?.length ?? 0) < MIN_FULLTEXT_CHARS &&
+      (article.summary?.length ?? 0) < MIN_FULLTEXT_CHARS,
+  );
+  for (let i = 0; i < candidates.length; i += FULLTEXT_POOL) {
+    const batch = candidates.slice(i, i + FULLTEXT_POOL);
+    const results = await Promise.allSettled(
+      batch.map(({ article }) => extractFullText(article.url)),
+    );
+    batch.forEach(({ article }, j) => {
+      const result = results[j];
+      if (result?.status === "fulfilled" && result.value) {
+        extracted.set(article.url, result.value);
+      }
+    });
+  }
+
+  let added = 0;
+  let updated = 0;
+
+  for (const { article, existingId } of pending) {
+    if (existingId === null) {
       await db.insert(articles).values({
         id: crypto.randomUUID(),
         feedId,
         url: article.url,
         title: article.title,
         summary: article.summary,
-        content: article.content,
+        content: article.content ?? extracted.get(article.url) ?? null,
         publishedAt: article.publishedAt,
         createdAt: Date.now(),
       });
@@ -189,7 +229,7 @@ export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult
           content: article.content,
           publishedAt: article.publishedAt,
         })
-        .where(eq(articles.id, existing.id));
+        .where(eq(articles.id, existingId));
       updated++;
     }
   }
