@@ -2157,3 +2157,14 @@ nodes into nested blockquotes (the marker was removed only in a final
 cleanup pass; the loop snapshot still held them). Fix: consume the marker
 at grouping time. Verified end-to-end against the saved Autistici page:
 one flat blockquote containing the full statement, intro and tail intact.
+
+### Fix en route: code tables overflow the reader pane (2026-10-11)
+Report via nosuchfield.com's Elasticsearch post: code frames spilled past
+the reader pane's right edge. Cause: Hugo's Chroma highlighter wraps code
+in `<figure><table><td><pre>` — the table sizes to its widest code line
+and neither respects the inner `<pre>`'s overflow-x nor wraps, dragging
+the whole pane wide (16 bare `<pre>` + 10 tables in that extraction).
+CSS fix: `.article-body table { display: block; max-width: 100%;
+overflow-x: auto; }` — block-level table scrolls horizontally inside the
+pane. Covers all highlighter-table and wide-data-table cases; frontend
+only, no re-extraction needed.

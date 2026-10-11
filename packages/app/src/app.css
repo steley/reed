@@ -114,6 +114,15 @@ body {
   padding: 0;
 }
 
+.article-body table {
+  /* syntax highlighters (e.g. Chroma) wrap code in tables; without this the
+     table sizes to its widest code line and drags the whole pane wide */
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
 .article-body ul,
 .article-body ol {
   margin: 0 0 1.25em;
