@@ -49,30 +49,29 @@ export function App() {
     setSelectedArticleId(null);
   }, [selectedFeedId, reloadArticles]);
 
-  // Unread counts per feed (from the currently loaded list; total from all feeds)
-  const unreadCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const article of articles) {
-      if (article.read === 0) {
-        counts[article.feedId] = (counts[article.feedId] ?? 0) + 1;
-      }
-    }
-    return counts;
-  }, [articles]);
-
-  // Global unread: fetch once and after refreshes (cheap enough for single user)
-  const [totalUnread, setTotalUnread] = useState(0);
-  const reloadTotalUnread = useCallback(async () => {
+  // All unread articles across every feed — single source of truth for the
+  // sidebar badges. Derived from the view-scoped `articles` list instead and
+  // the badges vanish the moment a feed filter narrows that list.
+  const [unreadList, setUnreadList] = useState<Article[]>([]);
+  const reloadUnread = useCallback(async () => {
     try {
-      const unread = await articlesApi.list({ unread: true });
-      setTotalUnread(unread.length);
+      setUnreadList(await articlesApi.list({ unread: true }));
     } catch {
       /* non-critical */
     }
   }, []);
   useEffect(() => {
-    reloadTotalUnread();
-  }, [reloadTotalUnread]);
+    reloadUnread();
+  }, [reloadUnread]);
+
+  const unreadCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const article of unreadList) {
+      counts[article.feedId] = (counts[article.feedId] ?? 0) + 1;
+    }
+    return counts;
+  }, [unreadList]);
+  const totalUnread = unreadList.length;
 
   const selectedFeed = feeds.find((f) => f.id === selectedFeedId) ?? null;
   const selectedArticle = articles.find((a) => a.id === selectedArticleId) ?? null;
@@ -85,14 +84,14 @@ export function App() {
     try {
       const targets = selectedFeedId ? [selectedFeedId] : feeds.map((f) => f.id);
       await Promise.allSettled(targets.map((id) => feedsApi.refresh(id)));
-      await Promise.all([reloadArticles(selectedFeedId), reloadTotalUnread()]);
+      await Promise.all([reloadArticles(selectedFeedId), reloadUnread()]);
       setFeeds(await feedsApi.list());
     } catch (err) {
       console.error("Refresh failed:", err);
     } finally {
       setIsRefreshing(false);
     }
-  }, [feeds, selectedFeedId, reloadArticles, reloadTotalUnread]);
+  }, [feeds, selectedFeedId, reloadArticles, reloadUnread]);
 
   const handleAddFeed = useCallback(
     async (url: string) => {
@@ -106,9 +105,9 @@ export function App() {
       setFeeds(await feedsApi.list());
       setSelectedFeedId(feed.id);
       await reloadArticles(feed.id);
-      await reloadTotalUnread();
+      await reloadUnread();
     },
-    [reloadArticles, reloadTotalUnread],
+    [reloadArticles, reloadUnread],
   );
 
   const handleDeleteFeed = useCallback(
@@ -119,15 +118,21 @@ export function App() {
         setSelectedFeedId(null);
         setSelectedArticleId(null);
       }
-      await reloadTotalUnread();
+      await reloadUnread();
     },
-    [selectedFeedId, reloadTotalUnread],
+    [selectedFeedId, reloadUnread],
   );
 
   const handleMarkRead = useCallback(async (id: string, read: boolean) => {
     const updated = await articlesApi.update(id, { read });
     setArticles((prev) => prev.map((a) => (a.id === id ? updated : a)));
-    setTotalUnread((prev) => Math.max(0, prev + (read ? -1 : 1)));
+    setUnreadList((prev) =>
+      read
+        ? prev.filter((a) => a.id !== id)
+        : prev.some((a) => a.id === id)
+          ? prev
+          : [...prev, updated],
+    );
   }, []);
 
   const handleSelectArticle = useCallback(

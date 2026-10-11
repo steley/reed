@@ -1224,3 +1224,39 @@ dependencies flagged.
 - `element.textContent` of sidebar rows concatenates the avatar letter with
   the name ("AAlpha Blog"); accessible-name matching (aria snapshot /
   `textContent.includes`) is the correct check for row visibility.
+
+---
+
+## Increment — Fix sidebar unread badges vanishing on feed selection
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was built
+- Sidebar unread badges are now derived from a dedicated full unread fetch
+  (`articlesApi.list({ unread: true })` → `unreadList` state): per-feed
+  counts group by `feedId`, total is `unreadList.length`. One fetch replaces
+  the two overlapping sources that existed before (view-derived counts +
+  separate total fetch).
+- `handleMarkRead` keeps `unreadList` in sync both ways (mark read removes
+  the article; mark unread re-adds it), so badges stay live between
+  refreshes.
+
+### Decisions made
+- **Root cause was data scope, not rendering:** `unreadCounts` was computed
+  from the currently loaded `articles` list, which is filtered by the
+  selected feed — selecting any feed made every other feed's badge vanish
+  (known quirk, previously tolerated). Deriving from the global unread list
+  fixes badges, folder unread aggregates, and the folder auto-expand rule in
+  one move.
+- **No new endpoint:** `?unread=true` already returned full article rows
+  including `feedId`; a `/api/feeds`-embedded count aggregate would be more
+  code for the same information at single-user scale.
+
+### Gotchas
+- The containment rule for folder auto-expand (selected feed keeps its
+  folder open) now matters even more: with view-derived counts, selecting a
+  feed zeroed every other folder's unread and would have collapsed them.
+  That flicker is gone with the global counts.
+- Verified in browser: select feed → all badges persist; open article →
+  its feed/folder/total badges decrement immediately; Mark unread → they
+  restore.
