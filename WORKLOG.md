@@ -1526,3 +1526,15 @@ authentication (AUDIT-003 stays open by request).
 - Redirect-loop tests use `Response(body, { status: 301, headers: { Location } })` —
   works under undici; `res.body?.cancel()` before discarding 3xx responses avoids
   leaked connections.
+
+### Follow-up (CI fix, same day)
+- First CI run failed at the bundle-freshness step: `esbuild` not found. Root
+  cause: `build:api` runs `pnpm --filter @reed/worker exec esbuild`, but esbuild
+  was never a direct dependency of the worker — the locally working bin was a
+  stale shim from an older install, pointing at a *different* esbuild version
+  than the lockfile's 0.25.12. CI's fresh install (rightly) had no bin.
+  Fix: `esbuild@0.25.12` pinned as a worker devDependency (reuses the existing
+  lockfile instance via vite), bundle regenerated — output differs from the
+  previously committed bundle (built by the old phantom version), so the
+  regenerated bundle ships with this commit. Sanity-checked: bundle loads and
+  exports all four method handlers.

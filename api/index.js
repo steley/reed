@@ -208,8 +208,7 @@ var require_validator = __commonJS({
         if (xmlData[i] === "<" && xmlData[i + 1] === "?") {
           i += 2;
           i = readPI(xmlData, i);
-          if (i.err)
-            return i;
+          if (i.err) return i;
         } else if (xmlData[i] === "<") {
           let tagStartPos = i;
           i++;
@@ -297,8 +296,7 @@ var require_validator = __commonJS({
                   continue;
                 } else if (xmlData[i + 1] === "?") {
                   i = readPI(xmlData, ++i);
-                  if (i.err)
-                    return i;
+                  if (i.err) return i;
                 } else {
                   break;
                 }
@@ -637,13 +635,11 @@ var require_xmlNode = __commonJS({
         this[":@"] = {};
       }
       add(key, val) {
-        if (key === "__proto__")
-          key = "#__proto__";
+        if (key === "__proto__") key = "#__proto__";
         this.child.push({ [key]: val });
       }
       addChild(node) {
-        if (node.tagname === "__proto__")
-          node.tagname = "#__proto__";
+        if (node.tagname === "__proto__") node.tagname = "#__proto__";
         if (node[":@"] && Object.keys(node[":@"]).length > 0) {
           this.child.push({ [node.tagname]: node.child, [":@"]: node[":@"] });
         } else {
@@ -929,8 +925,7 @@ var require_DocTypeReader = __commonJS({
     };
     function hasSeq(data, seq, i) {
       for (let j = 0; j < seq.length; j++) {
-        if (seq[j] !== data[i + j + 1])
-          return false;
+        if (seq[j] !== data[i + j + 1]) return false;
       }
       return true;
     }
@@ -959,13 +954,10 @@ var require_strnum = __commonJS({
     };
     function toNumber(str2, options = {}) {
       options = Object.assign({}, consider, options);
-      if (!str2 || typeof str2 !== "string")
-        return str2;
+      if (!str2 || typeof str2 !== "string") return str2;
       let trimmedStr = str2.trim();
-      if (options.skipLike !== void 0 && options.skipLike.test(trimmedStr))
-        return str2;
-      else if (str2 === "0")
-        return 0;
+      if (options.skipLike !== void 0 && options.skipLike.test(trimmedStr)) return str2;
+      else if (str2 === "0") return 0;
       else if (options.hex && hexRegex.test(trimmedStr)) {
         return parse_int(trimmedStr, 16);
       } else if (trimmedStr.search(/[eE]/) !== -1) {
@@ -989,29 +981,20 @@ var require_strnum = __commonJS({
           const sign = match2[1];
           const leadingZeros = match2[2];
           let numTrimmedByZeros = trimZeros(match2[3]);
-          if (!options.leadingZeros && leadingZeros.length > 0 && sign && trimmedStr[2] !== ".")
-            return str2;
-          else if (!options.leadingZeros && leadingZeros.length > 0 && !sign && trimmedStr[1] !== ".")
-            return str2;
-          else if (options.leadingZeros && leadingZeros === str2)
-            return 0;
+          if (!options.leadingZeros && leadingZeros.length > 0 && sign && trimmedStr[2] !== ".") return str2;
+          else if (!options.leadingZeros && leadingZeros.length > 0 && !sign && trimmedStr[1] !== ".") return str2;
+          else if (options.leadingZeros && leadingZeros === str2) return 0;
           else {
             const num = Number(trimmedStr);
             const numStr = "" + num;
             if (numStr.search(/[eE]/) !== -1) {
-              if (options.eNotation)
-                return num;
-              else
-                return str2;
+              if (options.eNotation) return num;
+              else return str2;
             } else if (trimmedStr.indexOf(".") !== -1) {
-              if (numStr === "0" && numTrimmedByZeros === "")
-                return num;
-              else if (numStr === numTrimmedByZeros)
-                return num;
-              else if (sign && numStr === "-" + numTrimmedByZeros)
-                return num;
-              else
-                return str2;
+              if (numStr === "0" && numTrimmedByZeros === "") return num;
+              else if (numStr === numTrimmedByZeros) return num;
+              else if (sign && numStr === "-" + numTrimmedByZeros) return num;
+              else return str2;
             }
             if (leadingZeros) {
               return numTrimmedByZeros === numStr || sign + numTrimmedByZeros === numStr ? num : str2;
@@ -1027,25 +1010,18 @@ var require_strnum = __commonJS({
     function trimZeros(numStr) {
       if (numStr && numStr.indexOf(".") !== -1) {
         numStr = numStr.replace(/0+$/, "");
-        if (numStr === ".")
-          numStr = "0";
-        else if (numStr[0] === ".")
-          numStr = "0" + numStr;
-        else if (numStr[numStr.length - 1] === ".")
-          numStr = numStr.substr(0, numStr.length - 1);
+        if (numStr === ".") numStr = "0";
+        else if (numStr[0] === ".") numStr = "0" + numStr;
+        else if (numStr[numStr.length - 1] === ".") numStr = numStr.substr(0, numStr.length - 1);
         return numStr;
       }
       return numStr;
     }
     function parse_int(numStr, base) {
-      if (parseInt)
-        return parseInt(numStr, base);
-      else if (Number.parseInt)
-        return Number.parseInt(numStr, base);
-      else if (window && window.parseInt)
-        return window.parseInt(numStr, base);
-      else
-        throw new Error("parseInt, Number.parseInt, window.parseInt are not supported");
+      if (parseInt) return parseInt(numStr, base);
+      else if (Number.parseInt) return Number.parseInt(numStr, base);
+      else if (window && window.parseInt) return window.parseInt(numStr, base);
+      else throw new Error("parseInt, Number.parseInt, window.parseInt are not supported");
     }
     module2.exports = toNumber;
   }
@@ -1133,8 +1109,7 @@ var require_OrderedObjParser = __commonJS({
           this.stopNodesWildcard = /* @__PURE__ */ new Set();
           for (let i = 0; i < this.options.stopNodes.length; i++) {
             const stopNodeExp = this.options.stopNodes[i];
-            if (typeof stopNodeExp !== "string")
-              continue;
+            if (typeof stopNodeExp !== "string") continue;
             if (stopNodeExp.startsWith("*.")) {
               this.stopNodesWildcard.add(stopNodeExp.substring(2));
             } else {
@@ -1161,8 +1136,7 @@ var require_OrderedObjParser = __commonJS({
           val = val.trim();
         }
         if (val.length > 0) {
-          if (!escapeEntities)
-            val = this.replaceEntitiesValue(val, tagName, jPath);
+          if (!escapeEntities) val = this.replaceEntitiesValue(val, tagName, jPath);
           const newval = this.options.tagValueProcessor(tagName, val, jPath, hasAttributes, isLeafNode);
           if (newval === null || newval === void 0) {
             return val;
@@ -1289,8 +1263,7 @@ var require_OrderedObjParser = __commonJS({
             i = closeIndex;
           } else if (xmlData[i + 1] === "?") {
             let tagData = readTagExp(xmlData, i, false, "?>");
-            if (!tagData)
-              throw new Error("Pi Tag is not closed.");
+            if (!tagData) throw new Error("Pi Tag is not closed.");
             textData = this.saveTextToParentTag(textData, currentNode, jPath);
             if (this.options.ignoreDeclaration && tagData.tagName === "?xml" || this.options.ignorePiTags) {
             } else {
@@ -1319,8 +1292,7 @@ var require_OrderedObjParser = __commonJS({
             const tagExp = xmlData.substring(i + 9, closeIndex);
             textData = this.saveTextToParentTag(textData, currentNode, jPath);
             let val = this.parseTextData(tagExp, currentNode.tagname, jPath, true, false, true, true);
-            if (val == void 0)
-              val = "";
+            if (val == void 0) val = "";
             if (this.options.cdataPropName) {
               currentNode.add(this.options.cdataPropName, [{ [this.options.textNodeName]: tagExp }]);
             } else {
@@ -1373,8 +1345,7 @@ var require_OrderedObjParser = __commonJS({
                 i = result.closeIndex;
               } else {
                 const result2 = this.readStopNodeData(xmlData, rawTagName, closeIndex + 1);
-                if (!result2)
-                  throw new Error(`Unexpected end of ${rawTagName}`);
+                if (!result2) throw new Error(`Unexpected end of ${rawTagName}`);
                 i = result2.i;
                 tagContent = result2.tagContent;
               }
@@ -1442,8 +1413,7 @@ var require_OrderedObjParser = __commonJS({
       return xmlObj.child;
     };
     function addChild(currentNode, childNode, jPath, startIndex) {
-      if (!this.options.captureMetaData)
-        startIndex = void 0;
+      if (!this.options.captureMetaData) startIndex = void 0;
       const result = this.options.updateTag(childNode.tagname, jPath, childNode[":@"]);
       if (result === false) {
       } else if (typeof result === "string") {
@@ -1493,8 +1463,7 @@ var require_OrderedObjParser = __commonJS({
           }
         }
       }
-      if (val.indexOf("&") === -1)
-        return val;
+      if (val.indexOf("&") === -1) return val;
       for (const entityName of Object.keys(this.lastEntities)) {
         const entity = this.lastEntities[entityName];
         const matches = val.match(entity.regex);
@@ -1508,8 +1477,7 @@ var require_OrderedObjParser = __commonJS({
         }
         val = val.replace(entity.regex, entity.val);
       }
-      if (val.indexOf("&") === -1)
-        return val;
+      if (val.indexOf("&") === -1) return val;
       if (this.options.htmlEntities) {
         for (const entityName of Object.keys(this.htmlEntities)) {
           const entity = this.htmlEntities[entityName];
@@ -1530,8 +1498,7 @@ var require_OrderedObjParser = __commonJS({
     };
     function saveTextToParentTag(textData, parentNode, jPath, isLeafNode) {
       if (textData) {
-        if (isLeafNode === void 0)
-          isLeafNode = parentNode.child.length === 0;
+        if (isLeafNode === void 0) isLeafNode = parentNode.child.length === 0;
         textData = this.parseTextData(
           textData,
           parentNode.tagname,
@@ -1547,10 +1514,8 @@ var require_OrderedObjParser = __commonJS({
       return textData;
     }
     function isItStopNode(stopNodesExact, stopNodesWildcard, jPath, currentTagName) {
-      if (stopNodesWildcard && stopNodesWildcard.has(currentTagName))
-        return true;
-      if (stopNodesExact && stopNodesExact.has(jPath))
-        return true;
+      if (stopNodesWildcard && stopNodesWildcard.has(currentTagName)) return true;
+      if (stopNodesExact && stopNodesExact.has(jPath)) return true;
       return false;
     }
     function tagExpWithClosingIndex(xmlData, i, closingChar = ">") {
@@ -1559,8 +1524,7 @@ var require_OrderedObjParser = __commonJS({
       for (let index2 = i; index2 < xmlData.length; index2++) {
         let ch = xmlData[index2];
         if (attrBoundary) {
-          if (ch === attrBoundary)
-            attrBoundary = "";
+          if (ch === attrBoundary) attrBoundary = "";
         } else if (ch === '"' || ch === "'") {
           attrBoundary = ch;
         } else if (ch === closingChar[0]) {
@@ -1593,8 +1557,7 @@ var require_OrderedObjParser = __commonJS({
     }
     function readTagExp(xmlData, i, removeNSPrefix, closingChar = ">") {
       const result = tagExpWithClosingIndex(xmlData, i + 1, closingChar);
-      if (!result)
-        return;
+      if (!result) return;
       let tagExp = result.data;
       const closeIndex = result.index;
       const separatorIndex = tagExp.search(/\s/);
@@ -1663,12 +1626,9 @@ var require_OrderedObjParser = __commonJS({
     function parseValue(val, shouldParse, options) {
       if (shouldParse && typeof val === "string") {
         const newval = val.trim();
-        if (newval === "true")
-          return true;
-        else if (newval === "false")
-          return false;
-        else
-          return toNumber(val, options);
+        if (newval === "true") return true;
+        else if (newval === "false") return false;
+        else return toNumber(val, options);
       } else {
         if (util.isExist(val)) {
           return val;
@@ -1711,15 +1671,11 @@ var require_node2json = __commonJS({
         const tagObj = arr2[i];
         const property = propName(tagObj);
         let newJpath = "";
-        if (jPath === void 0)
-          newJpath = property;
-        else
-          newJpath = jPath + "." + property;
+        if (jPath === void 0) newJpath = property;
+        else newJpath = jPath + "." + property;
         if (property === options.textNodeName) {
-          if (text2 === void 0)
-            text2 = tagObj[property];
-          else
-            text2 += "" + tagObj[property];
+          if (text2 === void 0) text2 = tagObj[property];
+          else text2 += "" + tagObj[property];
         } else if (property === void 0) {
           continue;
         } else if (tagObj[property]) {
@@ -1730,10 +1686,8 @@ var require_node2json = __commonJS({
           } else if (Object.keys(val).length === 1 && val[options.textNodeName] !== void 0 && !options.alwaysCreateTextNode) {
             val = val[options.textNodeName];
           } else if (Object.keys(val).length === 0) {
-            if (options.alwaysCreateTextNode)
-              val[options.textNodeName] = "";
-            else
-              val = "";
+            if (options.alwaysCreateTextNode) val[options.textNodeName] = "";
+            else val = "";
           }
           if (compressedObj[property] !== void 0 && compressedObj.hasOwnProperty(property)) {
             if (!Array.isArray(compressedObj[property])) {
@@ -1750,18 +1704,15 @@ var require_node2json = __commonJS({
         }
       }
       if (typeof text2 === "string") {
-        if (text2.length > 0)
-          compressedObj[options.textNodeName] = text2;
-      } else if (text2 !== void 0)
-        compressedObj[options.textNodeName] = text2;
+        if (text2.length > 0) compressedObj[options.textNodeName] = text2;
+      } else if (text2 !== void 0) compressedObj[options.textNodeName] = text2;
       return compressedObj;
     }
     function propName(obj) {
       const keys = Object.keys(obj);
       for (let i = 0; i < keys.length; i++) {
         const key = keys[i];
-        if (key !== ":@")
-          return key;
+        if (key !== ":@") return key;
       }
     }
     function assignAttributes(obj, attrMap, jpath, options) {
@@ -1818,8 +1769,7 @@ var require_XMLParser = __commonJS({
           throw new Error("XML data is accepted in String or Bytes[] form.");
         }
         if (validationOption) {
-          if (validationOption === true)
-            validationOption = {};
+          if (validationOption === true) validationOption = {};
           const result = validator.validate(xmlData, validationOption);
           if (result !== true) {
             throw Error(`${result.err.msg}:${result.err.line}:${result.err.col}`);
@@ -1828,10 +1778,8 @@ var require_XMLParser = __commonJS({
         const orderedObjParser = new OrderedObjParser(this.options);
         orderedObjParser.addExternalEntities(this.externalEntities);
         const orderedResult = orderedObjParser.parseXml(xmlData);
-        if (this.options.preserveOrder || orderedResult === void 0)
-          return orderedResult;
-        else
-          return prettify(orderedResult, this.options);
+        if (this.options.preserveOrder || orderedResult === void 0) return orderedResult;
+        else return prettify(orderedResult, this.options);
       }
       /**
        * Add Entity which is not by default supported by this library
@@ -1879,13 +1827,10 @@ var require_orderedJs2Xml = __commonJS({
       for (let i = 0; i < arr2.length; i++) {
         const tagObj = arr2[i];
         const tagName = propName(tagObj);
-        if (tagName === void 0)
-          continue;
+        if (tagName === void 0) continue;
         let newJPath = "";
-        if (jPath.length === 0)
-          newJPath = tagName;
-        else
-          newJPath = `${jPath}.${tagName}`;
+        if (jPath.length === 0) newJPath = tagName;
+        else newJPath = `${jPath}.${tagName}`;
         if (tagName === options.textNodeName) {
           let tagText = tagObj[tagName];
           if (!isStopNode(newJPath, options)) {
@@ -1926,10 +1871,8 @@ var require_orderedJs2Xml = __commonJS({
         const tagStart = indentation + `<${tagName}${attStr}`;
         const tagValue = arrToStr(tagObj[tagName], options, newJPath, newIdentation);
         if (options.unpairedTags.indexOf(tagName) !== -1) {
-          if (options.suppressUnpairedNode)
-            xmlStr += tagStart + ">";
-          else
-            xmlStr += tagStart + "/>";
+          if (options.suppressUnpairedNode) xmlStr += tagStart + ">";
+          else xmlStr += tagStart + "/>";
         } else if ((!tagValue || tagValue.length === 0) && options.suppressEmptyNode) {
           xmlStr += tagStart + "/>";
         } else if (tagValue && tagValue.endsWith(">")) {
@@ -1951,18 +1894,15 @@ var require_orderedJs2Xml = __commonJS({
       const keys = Object.keys(obj);
       for (let i = 0; i < keys.length; i++) {
         const key = keys[i];
-        if (!Object.prototype.hasOwnProperty.call(obj, key))
-          continue;
-        if (key !== ":@")
-          return key;
+        if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
+        if (key !== ":@") return key;
       }
     }
     function attr_to_str(attrMap, options) {
       let attrStr = "";
       if (attrMap && !options.ignoreAttributes) {
         for (let attr in attrMap) {
-          if (!Object.prototype.hasOwnProperty.call(attrMap, attr))
-            continue;
+          if (!Object.prototype.hasOwnProperty.call(attrMap, attr)) continue;
           let attrVal = options.attributeValueProcessor(attr, attrMap[attr]);
           attrVal = replaceEntitiesValue(attrVal, options);
           if (attrVal === true && options.suppressBooleanAttributes) {
@@ -1978,8 +1918,7 @@ var require_orderedJs2Xml = __commonJS({
       jPath = jPath.substr(0, jPath.length - options.textNodeName.length - 1);
       let tagName = jPath.substr(jPath.lastIndexOf(".") + 1);
       for (let index2 in options.stopNodes) {
-        if (options.stopNodes[index2] === jPath || options.stopNodes[index2] === "*." + tagName)
-          return true;
+        if (options.stopNodes[index2] === jPath || options.stopNodes[index2] === "*." + tagName) return true;
       }
       return false;
     }
@@ -2077,8 +2016,7 @@ var require_json2xml = __commonJS({
       let val = "";
       const jPath = ajPath.join(".");
       for (let key in jObj) {
-        if (!Object.prototype.hasOwnProperty.call(jObj, key))
-          continue;
+        if (!Object.prototype.hasOwnProperty.call(jObj, key)) continue;
         if (typeof jObj[key] === "undefined") {
           if (this.isAttribute(key)) {
             val += "";
@@ -2115,10 +2053,8 @@ var require_json2xml = __commonJS({
             const item = jObj[key][j];
             if (typeof item === "undefined") {
             } else if (item === null) {
-              if (key[0] === "?")
-                val += this.indentate(level) + "<" + key + "?" + this.tagEndChar;
-              else
-                val += this.indentate(level) + "<" + key + "/" + this.tagEndChar;
+              if (key[0] === "?") val += this.indentate(level) + "<" + key + "?" + this.tagEndChar;
+              else val += this.indentate(level) + "<" + key + "/" + this.tagEndChar;
             } else if (typeof item === "object") {
               if (this.options.oneListGroup) {
                 const result = this.j2x(item, level + 1, ajPath.concat(key));
@@ -2162,8 +2098,7 @@ var require_json2xml = __commonJS({
       val = this.replaceEntitiesValue(val);
       if (this.options.suppressBooleanAttributes && val === "true") {
         return " " + attrName;
-      } else
-        return " " + attrName + '="' + val + '"';
+      } else return " " + attrName + '="' + val + '"';
     };
     function processTextOrObjNode(object2, key, level, ajPath) {
       const result = this.j2x(object2, level + 1, ajPath.concat(key));
@@ -2175,8 +2110,7 @@ var require_json2xml = __commonJS({
     }
     Builder.prototype.buildObjectNode = function(val, key, attrStr, level) {
       if (val === "") {
-        if (key[0] === "?")
-          return this.indentate(level) + "<" + key + attrStr + "?" + this.tagEndChar;
+        if (key[0] === "?") return this.indentate(level) + "<" + key + attrStr + "?" + this.tagEndChar;
         else {
           return this.indentate(level) + "<" + key + attrStr + this.closeTag(key) + this.tagEndChar;
         }
@@ -2199,8 +2133,7 @@ var require_json2xml = __commonJS({
     Builder.prototype.closeTag = function(key) {
       let closeTag = "";
       if (this.options.unpairedTags.indexOf(key) !== -1) {
-        if (!this.options.suppressUnpairedNode)
-          closeTag = "/";
+        if (!this.options.suppressUnpairedNode) closeTag = "/";
       } else if (this.options.suppressEmptyNode) {
         closeTag = "/";
       } else {
@@ -3704,7 +3637,7 @@ var Hono = class _Hono {
 var emptyParam = [];
 function match(method, path) {
   const matchers = this.buildAllMatchers();
-  const match2 = (method2, path2) => {
+  const match2 = ((method2, path2) => {
     const matcher = matchers[method2] || matchers[METHOD_NAME_ALL];
     const staticMatch = matcher[2][path2];
     if (staticMatch) {
@@ -3716,7 +3649,7 @@ function match(method, path) {
     }
     const index2 = match3.indexOf("", 1);
     return [matcher[1][index2], match3];
-  };
+  });
   this.match = match2;
   return match2(method, path);
 }
@@ -14412,37 +14345,28 @@ function parseAtom(parsed) {
   return { meta, articles: articles2 };
 }
 function str(val) {
-  if (val === null || val === void 0)
-    return null;
-  if (typeof val === "string")
-    return val.trim() || null;
-  if (typeof val === "number")
-    return String(val);
+  if (val === null || val === void 0) return null;
+  if (typeof val === "string") return val.trim() || null;
+  if (typeof val === "number") return String(val);
   if (typeof val === "object") {
     const obj = val;
-    if ("#text" in obj)
-      return str(obj["#text"]);
+    if ("#text" in obj) return str(obj["#text"]);
   }
   return null;
 }
 function arr(val) {
-  if (!val)
-    return [];
-  if (Array.isArray(val))
-    return val;
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
   return [val];
 }
 function parseDate(val) {
-  if (!val)
-    return null;
+  if (!val) return null;
   const ms = Date.parse(val);
   return Number.isNaN(ms) ? null : ms;
 }
 function atomText(val) {
-  if (!val)
-    return null;
-  if (typeof val === "string")
-    return val.trim() || null;
+  if (!val) return null;
+  if (typeof val === "string") return val.trim() || null;
   if (typeof val === "object") {
     const obj = val;
     return str(obj["#text"]);
@@ -14454,16 +14378,13 @@ function atomLink(val, rel) {
   for (const link of links) {
     const l = link;
     const href = str(l["@_href"]);
-    if (!href)
-      continue;
+    if (!href) continue;
     const linkRel = str(l["@_rel"]);
     if (rel === null) {
-      if (linkRel !== "self")
-        return href;
+      if (linkRel !== "self") return href;
       continue;
     }
-    if (linkRel === rel)
-      return href;
+    if (linkRel === rel) return href;
   }
   return null;
 }
@@ -14486,26 +14407,18 @@ function assertFetchableUrl(url) {
 function isPrivateIp(ip) {
   if (ip.includes(":")) {
     const v6 = ip.toLowerCase();
-    if (v6 === "::" || v6 === "::1")
-      return true;
-    if (v6.startsWith("::ffff:"))
-      return isPrivateIp(v6.slice(7));
+    if (v6 === "::" || v6 === "::1") return true;
+    if (v6.startsWith("::ffff:")) return isPrivateIp(v6.slice(7));
     return /^(f[cd]|fe[89ab])/.test(v6);
   }
   const parts = ip.split(".").map(Number);
-  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p)))
-    return true;
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p))) return true;
   const [a, b] = parts;
-  if (a === 0 || a === 10 || a === 127)
-    return true;
-  if (a === 100 && b >= 64 && b <= 127)
-    return true;
-  if (a === 169 && b === 254)
-    return true;
-  if (a === 172 && b >= 16 && b <= 31)
-    return true;
-  if (a === 192 && b === 168)
-    return true;
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
   return false;
 }
 async function assertPublicHost(hostname) {
@@ -14520,15 +14433,13 @@ async function readBodyWithLimit(response, url) {
     throw new Error(`Feed response from ${url} exceeds ${MAX_RESPONSE_BYTES} byte limit`);
   }
   const reader = response.body?.getReader();
-  if (!reader)
-    return "";
+  if (!reader) return "";
   const decoder = new TextDecoder();
   let text2 = "";
   let total = 0;
   for (; ; ) {
     const { done, value } = await reader.read();
-    if (done)
-      break;
+    if (done) break;
     total += value.byteLength;
     if (total > MAX_RESPONSE_BYTES) {
       await reader.cancel();
@@ -14587,8 +14498,7 @@ async function refreshFeed(feedId, db) {
   let added = 0;
   let updated = 0;
   for (const article of parsed.articles) {
-    if (!article.url)
-      continue;
+    if (!article.url) continue;
     const existingRows = await db.select({ id: articles.id, feedId: articles.feedId }).from(articles).where(eq(articles.url, article.url)).limit(1);
     const existing = existingRows[0];
     if (!existing) {
@@ -14736,12 +14646,10 @@ articlesRouter.get("/", async (c) => {
       sql`SELECT article_id FROM articles_fts WHERE ${sql.join(likeGroups, sql` AND `)}`
     );
     const ids = ftsRows.map((row) => row.article_id);
-    if (ids.length === 0)
-      return c.json([]);
+    if (ids.length === 0) return c.json([]);
     conditions.push(inArray(articles.id, ids));
   }
-  if (feedId)
-    conditions.push(eq(articles.feedId, feedId));
+  if (feedId) conditions.push(eq(articles.feedId, feedId));
   if (folderId) {
     conditions.push(
       inArray(
@@ -14750,8 +14658,7 @@ articlesRouter.get("/", async (c) => {
       )
     );
   }
-  if (unread === "true")
-    conditions.push(eq(articles.read, 0));
+  if (unread === "true") conditions.push(eq(articles.read, 0));
   const rows = await db.select().from(articles).where(conditions.length > 0 ? and(...conditions) : void 0).orderBy(desc(articles.publishedAt));
   return c.json(rows);
 });
@@ -14870,10 +14777,8 @@ var parser2 = new import_fast_xml_parser2.XMLParser({
   processEntities: { maxTotalExpansions: 1e5 }
 });
 function toArray(value) {
-  if (value === void 0 || value === null)
-    return [];
-  if (Array.isArray(value))
-    return value;
+  if (value === void 0 || value === null) return [];
+  if (Array.isArray(value)) return value;
   return [value];
 }
 function collectOutlines(nodes, folder, out) {
@@ -14901,8 +14806,7 @@ function parseOpml(xml) {
     return null;
   }
   const opml = parsed["opml"];
-  if (!opml)
-    return null;
+  if (!opml) return null;
   const head = opml["head"];
   const headTitle = head?.["title"];
   const feeds2 = [];
@@ -14991,8 +14895,7 @@ opmlRouter.post("/", async (c) => {
   const feedsSkipped = data.feeds.filter((item) => existingUrls.has(item.url)).length;
   const now = Date.now();
   for (const item of data.feeds) {
-    if (existingUrls.has(item.url))
-      continue;
+    if (existingUrls.has(item.url)) continue;
     let folderId = null;
     if (item.folder) {
       folderId = existingFolders.get(item.folder) ?? null;
