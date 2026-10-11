@@ -2007,3 +2007,29 @@ into Actions (one-shot, personal scale).
 Discarded: teaching refreshFeed to backfill lazily on upsert (violates the
 "never re-crawl on every hourly refresh" rule), and a one-off API endpoint
 (auth surface + serverless time budget for a job a local script does better).
+
+### Fix en route: relative image URLs in extracted full text (2026-10-11)
+First real full-text render showed broken images: the source page writes
+root-relative `src="/posts/…/cover.webp"`, Readability/linkedom leaves those
+untouched (its own `_fixRelativeUris` needs a document baseURI, which a
+parseHTML fragment doesn't have), and the reader renders the HTML on its own
+origin — so the browser resolved the image against the reader's domain and
+got a 404. The feed was no help (11-char summary, no content:encoded), the
+image itself was publicly fetchable — pure URL-resolution bug.
+
+Fix: `absolutizeUrls()` in `lib/extract.ts` — after extraction, rewrite
+`img src` / `a href` against the article page URL via `new URL(value,
+baseUrl)`. Absolute and protocol-relative URLs pass through unchanged, so
+it's idempotent and safe to run over stored content too. Exported so the
+backfill script reuses it: `backfill-fulltext.ts` gained a second,
+fetch-free pass that rewrites already-stored content in place (the rows
+written before this fix carry broken relative paths).
+
+Gotchas hit en route:
+- linkedom quirk: `parseHTML("<body>…</body>")` yields an empty
+  `body.innerHTML` — the fragment must be wrapped in a full document shell
+  (`<!doctype html><html><body>…`), otherwise the rewrite silently no-ops.
+  Caught immediately by verifying against the real page; worth remembering
+  for any future linkedom fragment parsing.
+- Readability does NOT absolutize URLs when fed a linkedom document — don't
+  assume its built-in `_fixRelativeUris` covers us.

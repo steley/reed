@@ -35,6 +35,20 @@ describe("extractFullText", () => {
     expect(content).not.toContain("nav links nav links");
   });
 
+  it("resolves relative image and link URLs against the article page", async () => {
+    const page = `<!doctype html><html><body><article>
+      ${Array.from({ length: 6 }, (_, i) => `<p>Full text paragraph ${i} with plenty of text so readability keeps it.</p>`).join("\n")}
+      <p><img src="/img/cover.webp" alt="cover"><img src="photo.jpg"><img src="https://cdn.example.com/x.png"></p>
+      <p><a href="/about">About</a></p>
+    </article></body></html>`;
+    vi.mocked(fetch).mockResolvedValue(new Response(page, { status: 200 }));
+    const content = await extractFullText("https://blog.example.com/posts/one/");
+    expect(content).toContain('src="https://blog.example.com/img/cover.webp"');
+    expect(content).toContain('src="https://blog.example.com/posts/one/photo.jpg"');
+    expect(content).toContain('src="https://cdn.example.com/x.png"');
+    expect(content).toContain('href="https://blog.example.com/about"');
+  });
+
   it("returns null on HTTP failure", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("nope", { status: 404 }));
     expect(await extractFullText("https://blog.example.com/post")).toBeNull();

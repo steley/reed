@@ -31237,12 +31237,27 @@ setPrototypeOf(Document4, Document2).prototype = Document2.prototype;
 
 // src/lib/extract.ts
 var ACCEPT_HTML = "text/html,application/xhtml+xml,*/*;q=0.8";
+function absolutizeUrls(html, baseUrl) {
+  const { document: document2 } = parseHTML(`<!doctype html><html><body>${html}</body></html>`);
+  for (const el of document2.querySelectorAll("img[src], a[href]")) {
+    const attr = el.hasAttribute("src") ? "src" : "href";
+    const value = el.getAttribute(attr);
+    if (!value) continue;
+    try {
+      el.setAttribute(attr, new URL(value, baseUrl).href);
+    } catch {
+    }
+  }
+  return document2.body.innerHTML;
+}
 async function extractFullText(url) {
   try {
     const html = await fetchWithGuards(url, ACCEPT_HTML);
     const { document: document2 } = parseHTML(html);
     const parsed = new import_readability.Readability(document2).parse();
-    return parsed?.content?.trim() || null;
+    const content = parsed?.content?.trim();
+    if (!content) return null;
+    return absolutizeUrls(content, url);
   } catch {
     return null;
   }

@@ -4,11 +4,14 @@
  * so pre-existing rows never get revisited). Reads DATABASE_URL from the
  * environment. Safe to re-run — rows that already have full content are
  * skipped, extraction failures are left untouched (re-run retries them).
+ * A second fetch-free pass absolutizes relative img/a URLs in already-stored
+ * content (rows extracted before absolutization existed point their images
+ * at the reader's own domain).
  */
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "../src/db/client.ts";
 import { articles } from "../src/db/schema.ts";
-import { extractFullText } from "../src/lib/extract.ts";
+import { absolutizeUrls, extractFullText } from "../src/lib/extract.ts";
 
 const POOL = 4;
 
@@ -38,3 +41,22 @@ for (let i = 0; i < rows.length; i += POOL) {
 }
 
 console.log(`Done: ${filled} filled, ${failed} without full text.`);
+
+// Second pass: absolutize relative img/a URLs in already-stored content.
+// Rows extracted before absolutization existed carry src="/..." paths that
+// resolve against the reader's own domain and 404. Pure local rewrite — no
+// fetches, idempotent (absolute URLs are returned unchanged).
+const stored = await db
+  .select({ id: articles.id, url: articles.url, content: articles.content })
+  .from(articles)
+  .where(sql`${articles.content} IS NOT NULL`);
+let fixed = 0;
+for (const row of stored) {
+  if (!row.content) continue;
+  const absolute = absolutizeUrls(row.content, row.url);
+  if (absolute !== row.content) {
+    await db.update(articles).set({ content: absolute }).where(eq(articles.id, row.id));
+    fixed++;
+  }
+}
+console.log(`URL fix: ${fixed} row(s) rewritten.`);
