@@ -2101,3 +2101,12 @@ than N% of its text) — the ratio was 0.86 on this page, so any threshold
 that catches it also fires on pages where Readability legitimately stripped
 noise. Trade-off: the quote loses its blockquote styling in the reader
 (flat paragraphs) — accepted, completeness beats indent formatting.
+
+### En route: backfill --force (2026-10-11)
+The blockquote fix above only helps future extractions — the httpsmail
+article already had a 2.6 KB truncated body stored, which the backfill's
+"content IS NULL OR < 500 chars" criterion skips. `backfill-fulltext.ts`
+now accepts `backfill [--force] [url-substring]`: --force re-runs
+extraction on rows that already have content (failed re-extracts keep the
+stored body), the optional substring narrows selection by URL. Targeted
+use: `pnpm --filter @reed/worker backfill --force httpsmail.com`.

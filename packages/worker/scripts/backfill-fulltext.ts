@@ -7,20 +7,35 @@
  * A second fetch-free pass absolutizes relative img/a URLs in already-stored
  * content (rows extracted before absolutization existed point their images
  * at the reader's own domain).
+ *
+ * Usage: backfill [--force] [url-substring]
+ * --force re-runs extraction even for rows that already have content
+ * (e.g. after an extraction-quality fix); a failed re-extract keeps the
+ * stored content. The optional substring narrows the selection by URL.
  */
-import { eq, sql } from "drizzle-orm";
+import { and, eq, type SQL, sql } from "drizzle-orm";
 import { getDb } from "../src/db/client.ts";
 import { articles } from "../src/db/schema.ts";
 import { absolutizeUrls, extractFullText } from "../src/lib/extract.ts";
 
 const POOL = 4;
+const args = process.argv.slice(2);
+const force = args.includes("--force");
+const urlSubstring = args.find((a) => !a.startsWith("--"));
 
 const db = getDb();
+const conditions: SQL[] = [];
+if (!force) {
+  conditions.push(sql`(${articles.content} IS NULL OR length(${articles.content}) < 500)`);
+}
+if (urlSubstring) {
+  conditions.push(sql`${articles.url} LIKE ${`%${urlSubstring}%`}`);
+}
 const rows = await db
   .select({ id: articles.id, url: articles.url })
   .from(articles)
-  .where(sql`${articles.content} IS NULL OR length(${articles.content}) < 500`);
-console.log(`Backfilling full text for ${rows.length} article(s)...`);
+  .where(conditions.length === 0 ? undefined : and(...conditions));
+console.log(`Backfilling full text for ${rows.length} article(s)${force ? " (force)" : ""}...`);
 
 let filled = 0;
 let failed = 0;
