@@ -2277,3 +2277,17 @@ grows past the pane without ever scrolling.
 - Feed titles come from the feed itself and are overwritten on every refresh
   (`refresh.ts`), so a "Rename feed" feature would need a title-override
   column; deliberately skipped as YAGNI.
+
+### Gotcha addendum (same day): migration 0003 silently skipped by db:migrate
+`db:migrate` reported success but the column wasn't created. Cause: drizzle's
+migrator only applies journal entries whose `when` is newer than the latest
+row in `drizzle.__drizzle_migrations` — the hand-written `0002_multiuser`
+entry carries a synthetic future timestamp (1791997600000), while generated
+0003 got the real wall clock (1791709257304), so 0003 was filtered out as
+"already applied". Fix: bumped 0003's `when` in `meta/_journal.json` past
+0002's and re-ran `db:migrate`. Any future hand-written migration must set
+its `when` greater than every existing entry, or the next generated migration
+silently no-ops. Symptom signature: `NeonDbError: column ... does not exist`
+from cron/API while `GET /api/feeds` 500s (select now includes the missing
+column) — sidebar feeds vanish but folders/articles keep working, because
+only the feeds table changed.
