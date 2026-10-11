@@ -73,8 +73,11 @@ body {
 }
 
 .article-body img {
-  max-width: 100%;
+  /* width/height: auto overrides the source pages' width="…" attribute
+     hints (e.g. 56px widget art) — render at natural size, capped here */
+  width: auto;
   height: auto;
+  max-width: 100%;
   border-radius: 8px;
   margin: 1.5em 0;
 }

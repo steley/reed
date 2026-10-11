@@ -2033,3 +2033,14 @@ Gotchas hit en route:
   for any future linkedom fragment parsing.
 - Readability does NOT absolutize URLs when fed a linkedom document — don't
   assume its built-in `_fixRelativeUris` covers us.
+
+### Fix en route: extracted images render at attribute size (2026-10-11)
+After the URL fix, images displayed but tiny: source pages write
+`width="56" height="56"` presentation attributes (widget/album-art layout
+hints for their own CSS context), and `.article-body img` only had
+`max-width: 100%` — the width attribute still pinned the rendered size.
+CSS fix: `width: auto; height: auto` on `.article-body img` — author CSS
+beats presentational attribute hints, so images render at natural size,
+still capped by `max-width: 100%`. Deliberately done in CSS, not by
+stripping the attributes during extraction: one rule covers every feed,
+and the stored HTML keeps the source's own hints for any future consumer.
