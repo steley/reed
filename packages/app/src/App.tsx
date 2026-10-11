@@ -40,16 +40,22 @@ export function App() {
     foldersApi.list().then(setFolders).catch(console.error);
   }, []);
 
-  const reloadArticles = useCallback(async (feedId: string | null) => {
-    const opts = feedId ? { feedId } : undefined;
+  const reloadArticles = useCallback(async (feedId: string | null, q?: string) => {
+    const query = q?.trim();
+    const opts = {
+      ...(feedId ? { feedId } : {}),
+      ...(query ? { q: query } : {}),
+    };
     setArticles(await articlesApi.list(opts));
   }, []);
 
-  // Load articles when the selected feed changes
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Load articles when the selected feed or search query changes
   useEffect(() => {
-    reloadArticles(selectedFeedId).catch(console.error);
+    reloadArticles(selectedFeedId, searchQuery).catch(console.error);
     setSelectedArticleId(null);
-  }, [selectedFeedId, reloadArticles]);
+  }, [selectedFeedId, searchQuery, reloadArticles]);
 
   // All unread articles across every feed — single source of truth for the
   // sidebar badges. Derived from the view-scoped `articles` list instead and
@@ -86,14 +92,14 @@ export function App() {
     try {
       const targets = selectedFeedId ? [selectedFeedId] : feeds.map((f) => f.id);
       await Promise.allSettled(targets.map((id) => feedsApi.refresh(id)));
-      await Promise.all([reloadArticles(selectedFeedId), reloadUnread()]);
+      await Promise.all([reloadArticles(selectedFeedId, searchQuery), reloadUnread()]);
       setFeeds(await feedsApi.list());
     } catch (err) {
       console.error("Refresh failed:", err);
     } finally {
       setIsRefreshing(false);
     }
-  }, [feeds, selectedFeedId, reloadArticles, reloadUnread]);
+  }, [feeds, selectedFeedId, searchQuery, reloadArticles, reloadUnread]);
 
   const handleAddFeed = useCallback(
     async (url: string) => {
@@ -231,6 +237,8 @@ export function App() {
           feedsById={Object.fromEntries(feeds.map((f) => [f.id, f]))}
           isRefreshing={isRefreshing}
           sortAsc={sortAsc}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
           onOpenMenu={() => setSidebarOpen(true)}
           onSelectArticle={handleSelectArticle}
           onToggleSort={() => setSortAsc((s) => !s)}

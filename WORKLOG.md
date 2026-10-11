@@ -1325,3 +1325,60 @@ dependencies flagged.
 - Driven in the real UI: menu opens, Export href `/api/opml`, dialog file-pick →
   Import → "Imported 2 feeds, created 1 folder, skipped 0 duplicates." → sidebar
   shows the new folder + feed → export round-trips the imported data.
+
+---
+
+## Increment — Full-text search (FTS5)
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was built
+- `drizzle/0002_fts5_search.sql` — hand-written migration creating
+  `articles_fts` (FTS5 virtual table over `title`/`summary`/`content` with an
+  UNINDEXED `article_id` column), backfilling all existing articles, and adding
+  three AFTER INSERT/UPDATE/DELETE triggers on `articles` that keep the index
+  in sync. Journal entry appended to `drizzle/meta/_journal.json` manually.
+- `GET /api/articles?q=` — tokenizes the query on whitespace, wraps each token
+  in double quotes (FTS syntax injection-proof; tokens AND together), runs the
+  MATCH against `articles_fts` via `db.all(sql...)` to get article ids, then
+  folds `inArray(articles.id, ids)` into the existing condition list — so `q`
+  composes with `feed_id`/`folder_id`/`unread` for free. Empty match → `[]`.
+- Frontend: search input under the article-list header. `searchQuery` state in
+  App; the article-loading effect depends on it, so every keystroke refetches
+  `articlesApi.list({ feedId, q })` — search composes with the selected feed.
+  `handleRefresh` passes the current query so a refresh doesn't wipe results.
+- README roadmap trimmed to "auth, CLI tool"; search added to Features and the
+  API table.
+
+### Decisions made
+- **Triggers over code-side sync:** refresh upserts, mark-read updates, and
+  cascade deletes all touch `articles`; keeping the index in code would mean
+  touching every path. Triggers are one migration and cover paths that don't
+  exist yet.
+- **UNINDEXED `article_id` column instead of external-content/rowid tricks:**
+  deletes become a plain `DELETE ... WHERE article_id = ?`; external-content
+  FTS5 would save a little space but needs the `('delete', ...)` rowid dance
+  and a rowid→id join for every query. Single-user scale doesn't care.
+- **Hand-written migration + manual journal entry:** drizzle-kit cannot
+  generate FTS5 virtual tables or triggers. Convention documented in AGENTS.md
+  (write the `.sql`, append the journal entry; `ddl.ts` picks up any `*.sql`
+  automatically so tests/local DBs need nothing).
+- **Tokenize-and-quote instead of raw MATCH:** user input goes through one
+  escaping rule (`"` → `""`, per-token double quotes) — no FTS query syntax
+  errors, no way to inject `OR`/`NEAR`/`*`.
+- **No debounce:** one cheap indexed query per keystroke, single user.
+- **AND semantics:** multi-word queries narrow rather than widen — matches how
+  the user expects search in a small corpus to behave.
+
+### Gotchas
+- Verified FTS5 + triggers work in `@libsql/client`'s `:memory:` (Node) build
+  before committing to the design; Turso (libSQL) supports FTS5 too, but the
+  production DB still needs `pnpm --filter @reed/worker db:migrate` deployed.
+- Mark-read PATCHes fire the UPDATE trigger and reindex the row — harmless but
+  it means every read toggle rewrites the FTS row; acceptable at this scale.
+
+### Verification
+- 5 new tests in `articles.test.ts`: title/summary match, content match +
+  multi-word AND (plus no-cross-match → `[]`), `q` composing with `unread`,
+  FTS-syntax input (`" OR 1=1 --`) returning `[]` without erroring.
+- Full worker suite green (79 tests).

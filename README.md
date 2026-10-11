@@ -14,6 +14,7 @@ A personal RSS reader built on Vercel (Hono), Turso (libSQL/SQLite), and GitHub 
 
 - Add RSS 2.0 and Atom feeds by URL
 - Hourly background refresh via GitHub Actions; manual refresh-all or per-feed
+- Full-text search across article titles and bodies (SQLite FTS5)
 - Read/unread tracking, auto-mark-read on open
 - Sort articles newest or oldest first
 - Markdown and HTML article content rendering
@@ -67,7 +68,7 @@ reed/
 | `POST` | `/api/feeds` | Add a feed `{ url }` |
 | `DELETE` | `/api/feeds/:id` | Delete a feed and its articles |
 | `POST` | `/api/feeds/:id/refresh` | Manually refresh a feed |
-| `GET` | `/api/articles` | List articles (`?feed_id=`, `?unread=true`) |
+| `GET` | `/api/articles` | List articles (`?feed_id=`, `?unread=true`, `?q=` full-text search) |
 | `PATCH` | `/api/articles/:id` | Mark read/unread `{ read: boolean }` |
 
 All responses are JSON. Errors return `{ error: string }`.
@@ -147,4 +148,4 @@ Every commit runs:
 
 ## Roadmap
 
-- **Phase 3:** auth, CLI tool, full-text search (FTS5), OPML import/export
+- **Phase 3:** auth, CLI tool

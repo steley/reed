@@ -98,14 +98,12 @@ describe("GET /api/articles", () => {
   it("filters by folder_id across its feeds", async () => {
     await db.insert(folders).values({ id: "fol-1", name: "Tech", createdAt: Date.now() });
     // feed-2 joins the folder; feed-1 (FEED_ID) stays uncategorized
-    await db
-      .insert(feeds)
-      .values({
-        id: "feed-2",
-        url: "https://other.com/feed",
-        folderId: "fol-1",
-        createdAt: Date.now(),
-      });
+    await db.insert(feeds).values({
+      id: "feed-2",
+      url: "https://other.com/feed",
+      folderId: "fol-1",
+      createdAt: Date.now(),
+    });
     await db.insert(articles).values({
       id: "art-3",
       feedId: "feed-2",
@@ -123,6 +121,45 @@ describe("GET /api/articles", () => {
     await db.insert(folders).values({ id: "fol-2", name: "Empty", createdAt: Date.now() });
     const empty = await app.request("/api/articles?folder_id=fol-2");
     expect(await empty.json()).toEqual([]);
+  });
+
+  it("searches title and summary with q", async () => {
+    const res = await app.request("/api/articles?q=one");
+    const body = (await res.json()) as Array<Record<string, unknown>>;
+    expect(body).toHaveLength(1);
+    expect(body[0]?.["id"]).toBe("art-1");
+  });
+
+  it("searches content and ANDs multiple words", async () => {
+    await db.insert(articles).values({
+      id: "art-3",
+      feedId: FEED_ID,
+      url: "https://example.com/three",
+      title: "Deep dive",
+      content: "quantum entanglement explained",
+      createdAt: Date.now(),
+      read: 0,
+    });
+
+    const res = await app.request("/api/articles?q=deep+quantum");
+    const body = (await res.json()) as Array<Record<string, unknown>>;
+    expect(body).toHaveLength(1);
+    expect(body[0]?.["id"]).toBe("art-3");
+
+    const both = await app.request("/api/articles?q=quantum+article");
+    expect(await both.json()).toEqual([]);
+  });
+
+  it("combines q with unread", async () => {
+    const res = await app.request("/api/articles?q=two&unread=true");
+    expect(await res.json()).toEqual([]);
+  });
+
+  it("treats FTS syntax in q as literal text", async () => {
+    // Raw FTS5 would error or match everything on this input
+    const res = await app.request(`/api/articles?q=${encodeURIComponent('" OR 1=1 --')}`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
   });
 });
 

@@ -14612,7 +14612,18 @@ articlesRouter.get("/", async (c) => {
   const feedId = c.req.query("feed_id");
   const folderId = c.req.query("folder_id");
   const unread = c.req.query("unread");
+  const q = c.req.query("q")?.trim();
   const conditions = [];
+  if (q) {
+    const match2 = q.split(/\s+/).map((word) => `"${word.replaceAll('"', '""')}"`).join(" ");
+    const ftsRows = await db.all(
+      sql`SELECT article_id FROM articles_fts WHERE articles_fts MATCH ${match2}`
+    );
+    const ids = ftsRows.map((row) => row.article_id);
+    if (ids.length === 0)
+      return c.json([]);
+    conditions.push(inArray(articles.id, ids));
+  }
   if (feedId)
     conditions.push(eq(articles.feedId, feedId));
   if (folderId) {

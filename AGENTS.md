@@ -156,6 +156,22 @@ edit generated migration files. Test databases (`test-helpers.ts`) and
 loader that concatenates all `drizzle/*.sql`) — the migrations are the only
 place the DDL lives; never hand-write schema SQL elsewhere.
 
+Exception — features drizzle-kit cannot generate (e.g. `0002_fts5_search.sql`:
+FTS5 virtual table + sync triggers): hand-write the `.sql` in `drizzle/` and
+append a matching entry to `drizzle/meta/_journal.json` (same shape as the
+generated ones, incremented `idx`), so `db:migrate` picks it up. `ddl.ts`
+already includes any `*.sql` it finds, so tests and local DBs get it for free.
+
+### Full-text search (FTS5)
+`articles_fts` is an FTS5 virtual table mirroring `articles` (title, summary,
+content) kept in sync by AFTER INSERT/UPDATE/DELETE triggers — no code paths
+touch it except the search query, so refresh upserts, mark-read updates, and
+cascade deletes stay indexed automatically. `GET /api/articles?q=` splits the
+query on whitespace and wraps each token in double quotes before MATCH
+(injection-proof FTS syntax; tokens AND together). The route resolves matches
+to article ids via a raw `sql` query (`db.all`), then does the main select with
+the regular Drizzle builder so `q` composes with `feed_id`/`folder_id`/`unread`.
+
 ### Dependency patches (`patches/`)
 pnpm `patchedDependencies` in the root `package.json` carries three
 version-exact patches, all serving the Vercel serverless runtime (upstream had
@@ -225,7 +241,7 @@ Base path: `/api`
 | `POST` | `/api/folders` | Create folder `{ name: string }` → `201`; duplicate name → `409` |
 | `PATCH` | `/api/folders/:id` | Rename folder `{ name: string }` → `200` |
 | `DELETE` | `/api/folders/:id` | Delete folder; member feeds become uncategorized (not deleted) → `204` |
-| `GET` | `/api/articles` | List articles. Query params: `feed_id`, `folder_id`, `unread=true` |
+| `GET` | `/api/articles` | List articles. Query params: `feed_id`, `folder_id`, `unread=true`, `q` (FTS5 full-text search over title/summary/content) |
 | `PATCH` | `/api/articles/:id` | Update article `{ read: boolean }` → `200` |
 | `GET` | `/api/opml` | Export all feeds as OPML 2.0 XML download (`reed.opml`) |
 | `POST` | `/api/opml` | Import OPML body → `200 { feedsAdded, foldersCreated, feedsSkipped }`; feeds dedupe by URL (existing skipped, never moved), folders dedupe by name (reused or created). No fetch triggered — hourly cron picks up new feeds |
@@ -269,6 +285,7 @@ repository secrets; locally they can be exported in the shell or set per-command
 - **OPML import/export:** `···` button in the sidebar wordmark row opens a menu (Import OPML… / Export OPML), rendered outside the `<aside>` like the folder context menu. Export is a plain `<a href="/api/opml">` — the API's `Content-Disposition` triggers the download, no fetch wrapper. Import goes through `ImportOpmlDialog.tsx` (`file.text()` → POST `/api/opml`) and App reloads feeds+folders afterwards; the dialog shows result counts and a Done button. Import semantics are server-side (see API table): additive only, URL-dedupe for feeds, name-dedupe for folders. Parsing/generation lives in `worker/src/lib/opml.ts` on the existing `fast-xml-parser` dep — no OPML library.
 - **Article content rendering:** `marked` converts markdown → HTML, injected via `dangerouslySetInnerHTML`. 
 - **Sort order:** client-side by `publishedAt ?? createdAt`, toggleable newest/oldest. Default newest-first.
+- **Search:** a search input under the list header (`searchQuery` state in App, input in `ArticleList`) — every keystroke refetches `articlesApi.list({ feedId, q })`, so search composes with the selected feed (empty query = normal view). No debounce: single-user, one cheap query per keystroke.
 - **Unread counts:** sidebar badges derive from a dedicated full unread fetch (`articlesApi.list({ unread: true })` → `unreadList` in App), never from the view-scoped `articles` state — that list is filtered by the current feed selection, so counts derived from it would vanish the moment a feed is selected. `handleMarkRead` keeps `unreadList` in sync for immediate feedback.
 - **Auto-mark-read:** selecting an article marks it read automatically.
 
@@ -366,6 +383,6 @@ pnpm --filter @reed/worker db:export-d1   # then: turso db shell <db> < dump.sql
 |-------|--------|-------------|
 | 1 | Complete | API layer — Hono, Turso, REST endpoints, GH Actions refresh, Vitest |
 | 2 | Complete | Frontend — React, Vite, Tailwind v4 (Reeder-style rewrite 2026-10-10), static hosting on Vercel |
-| 3 | Deferred | Auth, CLI tool, FTS5 search (OPML import/export shipped 2026-10-11) |
+| 3 | Deferred | Auth, CLI tool (FTS5 search + OPML import/export shipped 2026-10-11) |
 
 See `WORKLOG.md` for increment-by-increment progress and decisions.

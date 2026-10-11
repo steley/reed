@@ -9,6 +9,8 @@ interface Props {
   feedsById: Record<string, Feed>;
   isRefreshing: boolean;
   sortAsc: boolean;
+  searchQuery: string;
+  onSearchChange(query: string): void;
   // mobile: show as full screen list (article not selected)
   onOpenMenu(): void;
   onSelectArticle(id: string): void;
@@ -23,6 +25,8 @@ export function ArticleList({
   feedsById,
   isRefreshing,
   sortAsc,
+  searchQuery,
+  onSearchChange,
   onOpenMenu,
   onSelectArticle,
   onToggleSort,
@@ -71,6 +75,18 @@ export function ArticleList({
           <Refresh width={15} height={15} className={isRefreshing ? "animate-spin" : ""} />
         </button>
       </header>
+
+      {/* Search */}
+      <div className="border-b border-line px-4 py-2 md:px-5">
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Search articles"
+          aria-label="Search articles"
+          className="w-full rounded-lg bg-card px-3 py-1.5 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:ring-1 focus:ring-accent/50"
+        />
+      </div>
 
       {/* Cards */}
       <div className="min-h-0 flex-1 overflow-y-auto">
