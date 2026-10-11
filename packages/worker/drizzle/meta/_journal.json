@@ -22,6 +22,13 @@
 			"when": 1791859200000,
 			"tag": "0002_fts5_search",
 			"breakpoints": true
+		},
+		{
+			"idx": 3,
+			"version": "6",
+			"when": 1791862800000,
+			"tag": "0003_fts5_trigram",
+			"breakpoints": true
 		}
 	]
 }

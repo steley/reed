@@ -217,3 +217,106 @@ describe("PATCH /api/articles/:id", () => {
     expect(res.status).toBe(400);
   });
 });
+
+// ---------------------------------------------------------------------------
+// GET /api/articles?q= — CJK / wildcard behavior
+// ---------------------------------------------------------------------------
+
+describe("GET /api/articles?q= CJK and wildcards", () => {
+  it("matches CJK substrings shorter than a trigram", async () => {
+    await db.insert(articles).values({
+      id: "art-cn",
+      feedId: FEED_ID,
+      url: "https://example.com/cn",
+      title: "量子计算的新进展",
+      createdAt: Date.now(),
+      read: 0,
+    });
+
+    const res = await app.request(`/api/articles?q=${encodeURIComponent("量子")}`);
+    const body = (await res.json()) as Array<Record<string, unknown>>;
+    expect(body).toHaveLength(1);
+    expect(body[0]?.["id"]).toBe("art-cn");
+  });
+
+  it("treats LIKE wildcards in q as literal text", async () => {
+    await db.insert(articles).values({
+      id: "art-pct",
+      feedId: FEED_ID,
+      url: "https://example.com/pct",
+      title: "100% sure",
+      createdAt: Date.now(),
+      read: 0,
+    });
+
+    const res = await app.request(`/api/articles?q=${encodeURIComponent("100%")}`);
+    const body = (await res.json()) as Array<Record<string, unknown>>;
+    expect(body).toHaveLength(1);
+    expect(body[0]?.["id"]).toBe("art-pct");
+
+    // _ would match any char if unescaped
+    const underscore = await app.request(`/api/articles?q=${encodeURIComponent("1_0")}`);
+    expect(await underscore.json()).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/articles/read-all
+// ---------------------------------------------------------------------------
+
+describe("POST /api/articles/read-all", () => {
+  it("marks all unread articles read", async () => {
+    const res = await app.request("/api/articles/read-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { marked: number };
+    expect(body.marked).toBe(1); // only art-1 starts unread
+
+    const unread = await app.request("/api/articles?unread=true");
+    expect(await unread.json()).toEqual([]);
+  });
+
+  it("scopes to feedId when given", async () => {
+    await db
+      .insert(feeds)
+      .values({ id: "feed-2", url: "https://other.com/feed", createdAt: Date.now() });
+    await db.insert(articles).values({
+      id: "art-3",
+      feedId: "feed-2",
+      url: "https://other.com/one",
+      createdAt: Date.now(),
+      read: 0,
+    });
+
+    const res = await app.request("/api/articles/read-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feedId: FEED_ID }),
+    });
+    const body = (await res.json()) as { marked: number };
+    expect(body.marked).toBe(1);
+
+    const unread = (await (await app.request("/api/articles?unread=true")).json()) as Array<
+      Record<string, unknown>
+    >;
+    expect(unread).toHaveLength(1);
+    expect(unread[0]?.["id"]).toBe("art-3");
+  });
+
+  it("accepts an empty body", async () => {
+    const res = await app.request("/api/articles/read-all", { method: "POST" });
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 400 for a non-string feedId", async () => {
+    const res = await app.request("/api/articles/read-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feedId: 42 }),
+    });
+    expect(res.status).toBe(400);
+  });
+});

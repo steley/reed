@@ -164,13 +164,27 @@ already includes any `*.sql` it finds, so tests and local DBs get it for free.
 
 ### Full-text search (FTS5)
 `articles_fts` is an FTS5 virtual table mirroring `articles` (title, summary,
-content) kept in sync by AFTER INSERT/UPDATE/DELETE triggers — no code paths
-touch it except the search query, so refresh upserts, mark-read updates, and
-cascade deletes stay indexed automatically. `GET /api/articles?q=` splits the
-query on whitespace and wraps each token in double quotes before MATCH
-(injection-proof FTS syntax; tokens AND together). The route resolves matches
-to article ids via a raw `sql` query (`db.all`), then does the main select with
+content) with the **trigram** tokenizer, kept in sync by AFTER
+INSERT/UPDATE/DELETE triggers — no code paths touch it except the search
+query, so refresh upserts, mark-read updates, and cascade deletes stay indexed
+automatically. Trigram (0003) replaced unicode61 (0002) because unicode61
+treats whole CJK sentences as one token — Chinese search returned nothing.
+
+`GET /api/articles?q=` does substring matching via `LIKE` on the fts table,
+not `MATCH`: trigram MATCH can't match tokens under 3 chars and most Chinese
+words are 2. `%`/`_`/`\` in the query are escaped; tokens AND together. LIKE
+on a trigram table uses the index for ≥3-char patterns and linear-scans
+shorter ones (fine at single-user scale). The route resolves matches to
+article ids via a raw `sql` query (`db.all`), then does the main select with
 the regular Drizzle builder so `q` composes with `feed_id`/`folder_id`/`unread`.
+Gotcha: libsql's `executeMultiple` can't parse backticks on FTS5 table
+options — write `tokenize = 'trigram'`, not `` `tokenize` = 'trigram' ``.
+
+Search highlighting is client-side (`highlightParts()` in app `lib/display.ts`,
+`<mark>` rendered by `ArticleList`): the server decides what matched, the
+client only paints the query tokens in title + summary. FTS5's `snippet()`
+auxiliary functions don't work with LIKE queries, which is why highlighting
+isn't server-side.
 
 ### Dependency patches (`patches/`)
 pnpm `patchedDependencies` in the root `package.json` carries three
@@ -243,6 +257,7 @@ Base path: `/api`
 | `DELETE` | `/api/folders/:id` | Delete folder; member feeds become uncategorized (not deleted) → `204` |
 | `GET` | `/api/articles` | List articles. Query params: `feed_id`, `folder_id`, `unread=true`, `q` (FTS5 full-text search over title/summary/content) |
 | `PATCH` | `/api/articles/:id` | Update article `{ read: boolean }` → `200` |
+| `POST` | `/api/articles/read-all` | Mark all unread articles read; `{ feedId?: string }` scopes to one feed → `200 { marked }` |
 | `GET` | `/api/opml` | Export all feeds as OPML 2.0 XML download (`reed.opml`) |
 | `POST` | `/api/opml` | Import OPML body → `200 { feedsAdded, foldersCreated, feedsSkipped }`; feeds dedupe by URL (existing skipped, never moved), folders dedupe by name (reused or created). No fetch triggered — hourly cron picks up new feeds |
 
@@ -281,11 +296,12 @@ repository secrets; locally they can be exported in the shell or set per-command
 - **Article typography:** rendered content uses the `.article-body` class (defined in `app.css`) — serif stack, hand-styled elements. Do not use Tailwind `prose` classes.
 - **Summary cleaning:** list-card summaries go through `cleanSummary()` in `lib/display.ts` (strips HTML + HN-style metadata blocks). Feed display names fall back to URL hostname via `feedDisplayName()` — never render a raw URL in the sidebar.
 - **Layout:** three panes — sidebar (w-64, mobile drawer with scrim), list (`md:w-[380px]`), reader (flex-1). On mobile the list and reader swap by `selectedArticle` state; no routing library.
-- **Folders:** sidebar groups feeds into folders (`Folders` section + uncategorized `Feeds` section). Order is auto-ascending by display name via `compareNames()` (`localeCompare`, handles mixed Chinese/English) — no manual ordering, no order columns. Folder rows expand/collapse on click (chevron): default collapsed, auto-expanded while the folder has unread articles or contains the selected feed; manual choices live in a `expandOverride` map in `FeedSidebar` local state (session-only). Collapsing a folder that holds the selected feed deselects it first (`onSelectFeed(null)`) so the active row never hides itself. Feeds move via native HTML5 drag-and-drop (`draggable` rows; folder rows and the uncategorized section are drop targets → `PATCH /api/feeds/:id`) — dropping onto a collapsed folder works. Folders rename/delete via a hand-rolled right-click context menu (`FeedSidebar.tsx`); `NameDialog.tsx` is the shared single-name prompt for create/rename. The context menu must render outside the `<aside>` element — the aside's translate transform makes it the containing block for `position: fixed` descendants. HTML5 DnD does not work on touch; there is no mobile path to assign folders yet. The server's `GET /api/articles?folder_id=` filter has no UI consumer since folder article views were removed — kept as API surface (CLI).
+- **Folders:** sidebar groups feeds into folders (`Folders` section + uncategorized `Feeds` section). Order is auto-ascending by display name via `compareNames()` (`localeCompare`, handles mixed Chinese/English) — no manual ordering, no order columns. Folder rows expand/collapse on click (chevron): default collapsed, auto-expanded while the folder has unread articles or contains the selected feed; manual choices live in a `expandOverride` map in `FeedSidebar` local state (session-only). Collapsing a folder that holds the selected feed deselects it first (`onSelectFeed(null)`) so the active row never hides itself. Feeds move via native HTML5 drag-and-drop (`draggable` rows; folder rows and the uncategorized section are drop targets → `PATCH /api/feeds/:id`) — dropping onto a collapsed folder works. Folders rename/delete via a hand-rolled right-click context menu (`FeedSidebar.tsx`); feeds get their own context menu (right-click or 500ms long-press on touch) with a "Move to" folder list + uncategorized + delete — that is the touch path for folder assignment, since HTML5 DnD does not work on touch. `NameDialog.tsx` is the shared single-name prompt for create/rename. The context menus must render outside the `<aside>` element — the aside's translate transform makes it the containing block for `position: fixed` descendants. The server's `GET /api/articles?folder_id=` filter has no UI consumer since folder article views were removed — kept as API surface (CLI).
 - **OPML import/export:** `···` button in the sidebar wordmark row opens a menu (Import OPML… / Export OPML), rendered outside the `<aside>` like the folder context menu. Export is a plain `<a href="/api/opml">` — the API's `Content-Disposition` triggers the download, no fetch wrapper. Import goes through `ImportOpmlDialog.tsx` (`file.text()` → POST `/api/opml`) and App reloads feeds+folders afterwards; the dialog shows result counts and a Done button. Import semantics are server-side (see API table): additive only, URL-dedupe for feeds, name-dedupe for folders. Parsing/generation lives in `worker/src/lib/opml.ts` on the existing `fast-xml-parser` dep — no OPML library.
 - **Article content rendering:** `marked` converts markdown → HTML, injected via `dangerouslySetInnerHTML`. 
 - **Sort order:** client-side by `publishedAt ?? createdAt`, toggleable newest/oldest. Default newest-first.
-- **Search:** a search input under the list header (`searchQuery` state in App, input in `ArticleList`) — every keystroke refetches `articlesApi.list({ feedId, q })`, so search composes with the selected feed (empty query = normal view). No debounce: single-user, one cheap query per keystroke.
+- **Search:** a search input under the list header (`searchQuery` state in App, input in `ArticleList`) — every keystroke refetches `articlesApi.list({ feedId, q })`, so search composes with the selected feed (empty query = normal view). No debounce: single-user, one cheap query per keystroke. Matches are highlighted client-side in the list (see FTS section under Key Design Decisions).
+- **Mark all read:** double-check button in the list header (only rendered while the current view has unread) → `POST /api/articles/read-all` scoped to the selected feed, or global when "All articles" is selected; App reloads the view list + `unreadList` afterwards. No confirm — unread state is the only thing at risk.
 - **Unread counts:** sidebar badges derive from a dedicated full unread fetch (`articlesApi.list({ unread: true })` → `unreadList` in App), never from the view-scoped `articles` state — that list is filtered by the current feed selection, so counts derived from it would vanish the moment a feed is selected. `handleMarkRead` keeps `unreadList` in sync for immediate feedback.
 - **Auto-mark-read:** selecting an article marks it read automatically.
 

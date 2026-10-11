@@ -1382,3 +1382,66 @@ dependencies flagged.
   multi-word AND (plus no-cross-match → `[]`), `q` composing with `unread`,
   FTS-syntax input (`" OR 1=1 --`) returning `[]` without erroring.
 - Full worker suite green (79 tests).
+
+---
+
+## Increment — Trigram search (CJK fix), highlight, read-all, feed context menu
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was built
+- **Chinese search fix:** user confirmed unicode61 FTS5 returned nothing for
+  Chinese on production. `drizzle/0003_fts5_trigram.sql` drops and rebuilds
+  `articles_fts` with `tokenize = 'trigram'` (same triggers, full backfill).
+  The query path changed from MATCH to `LIKE` on the fts table: trigram MATCH
+  can't match tokens under 3 chars and most Chinese words are 2. `%`/`_`/`\`
+  escaped; tokens AND together. LIKE rides the trigram index for ≥3-char
+  patterns; shorter ones linear-scan (fine at this scale).
+- **Search highlighting:** client-side — `highlightParts()` in app
+  `lib/display.ts` splits title/summary on the query tokens (regex-escaped,
+  case-insensitive), `ArticleList` wraps hits in `<mark>`. FTS5's `snippet()`
+  auxiliary functions require MATCH, which we no longer use — that's why the
+  highlight isn't server-side.
+- **POST /api/articles/read-all** — marks every unread article read, `{ feedId }`
+  scopes to one feed; returns `{ marked }`. UI: double-check button in the
+  list header, rendered only while the current view has unread; scope follows
+  the selected feed (global when "All articles"). App reloads view + unreadList
+  after.
+- **Feed context menu (mobile gap):** feed rows now open a context menu on
+  right-click *and* 500ms touch long-press: "Move to" list (each folder +
+  Uncategorized, current one ticked) + Delete feed. This is the touch path for
+  folder assignment that DnD never provided — previously a mobile user couldn't
+  even delete a feed (hover-only trash button). Menu state became a
+  discriminated union (folder | feed); still rendered outside `<aside>`.
+
+### Decisions made
+- **LIKE over MATCH:** one code path for every token length, no trigram-floor
+  special-casing, no FTS syntax injection surface at all. Cost: <3-char
+  patterns linear-scan the fts table — acceptable, and identical to what MATCH
+  would do anyway for those.
+- **Rebuild-in-place migration (0003) instead of mutating 0002:** generated
+  migrations are immutable; 0002 is already applied to production.
+- **Client-side highlight:** server return shape stays plain `Article[]`; the
+  painting decision belongs to the UI and costs one regex split.
+- **Long-press at 500ms:** standard mobile menu timing; cleared on
+  touchmove/scroll so scrolling the sidebar never pops the menu.
+- **No confirm on mark-all-read:** unread state is the only casualty, and the
+  button only appears when there's something to mark.
+
+### Gotchas
+- **libsql `executeMultiple` parse error on backticked FTS5 options:**
+  `tokenize` = 'trigram'`` (drizzle-style quoted identifier) fails with
+  "parse error"; unquoted `tokenize = 'trigram'` works. Cost one full debug
+  cycle — 72 test errors because createTestDb's schema apply failed silently
+  (executeMultiple result is fire-and-forget there).
+- Trigram needs SQLite ≥3.34 — libSQL ships 3.45.1 (verified locally; Turso
+  runs libSQL too).
+- `db.update(...).run()` on the libsql driver returns `rowsAffected` — used
+  for the `{ marked }` count without a second COUNT query.
+
+### Verification
+- 6 new tests: CJK 2-char substring match, `%`/`_` as literals, read-all
+  (unscoped count, feedId scoping, empty body, 400 on non-string feedId).
+  Existing search tests (title/summary, content, multi-word AND, q+unread,
+  FTS-syntax input) all pass unchanged under the LIKE path.
+- Full suite: 85 passing. Production needs `db:migrate` for 0003 before push.

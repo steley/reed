@@ -101,6 +101,13 @@ export function App() {
     }
   }, [feeds, selectedFeedId, searchQuery, reloadArticles, reloadUnread]);
 
+  // Mark all (or all in the selected feed) as read; refreshes both the view
+  // list and the sidebar unread badges
+  const handleMarkAllRead = useCallback(async () => {
+    await articlesApi.readAll(selectedFeedId ?? undefined);
+    await Promise.all([reloadArticles(selectedFeedId, searchQuery), reloadUnread()]);
+  }, [selectedFeedId, searchQuery, reloadArticles, reloadUnread]);
+
   const handleAddFeed = useCallback(
     async (url: string) => {
       const feed = await feedsApi.create({ url });
@@ -242,6 +249,7 @@ export function App() {
           onOpenMenu={() => setSidebarOpen(true)}
           onSelectArticle={handleSelectArticle}
           onToggleSort={() => setSortAsc((s) => !s)}
+          onMarkAllRead={handleMarkAllRead}
           onRefresh={handleRefresh}
         />
       </div>

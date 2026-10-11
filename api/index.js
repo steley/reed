@@ -14615,9 +14615,16 @@ articlesRouter.get("/", async (c) => {
   const q = c.req.query("q")?.trim();
   const conditions = [];
   if (q) {
-    const match2 = q.split(/\s+/).map((word) => `"${word.replaceAll('"', '""')}"`).join(" ");
+    const likeGroups = q.split(/\s+/).map((token) => {
+      const pattern = `%${token.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
+      return sql`(
+        title LIKE ${pattern} ESCAPE '\\'
+        OR summary LIKE ${pattern} ESCAPE '\\'
+        OR content LIKE ${pattern} ESCAPE '\\'
+      )`;
+    });
     const ftsRows = await db.all(
-      sql`SELECT article_id FROM articles_fts WHERE articles_fts MATCH ${match2}`
+      sql`SELECT article_id FROM articles_fts WHERE ${sql.join(likeGroups, sql` AND `)}`
     );
     const ids = ftsRows.map((row) => row.article_id);
     if (ids.length === 0)
@@ -14638,6 +14645,20 @@ articlesRouter.get("/", async (c) => {
     conditions.push(eq(articles.read, 0));
   const rows = await db.select().from(articles).where(conditions.length > 0 ? and(...conditions) : void 0).orderBy(articles.publishedAt);
   return c.json(rows);
+});
+articlesRouter.post("/read-all", async (c) => {
+  const db = c.get("db");
+  let body = {};
+  try {
+    body = await c.req.json();
+  } catch {
+  }
+  const feedId = body.feedId;
+  if (feedId !== void 0 && typeof feedId !== "string") {
+    return c.json({ error: "feedId must be a string" }, 400);
+  }
+  const result = await db.update(articles).set({ read: 1 }).where(feedId ? and(eq(articles.read, 0), eq(articles.feedId, feedId)) : eq(articles.read, 0)).run();
+  return c.json({ marked: result.rowsAffected });
 });
 articlesRouter.patch("/:id", async (c) => {
   const id = c.req.param("id");

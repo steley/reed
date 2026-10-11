@@ -15,14 +15,22 @@ articlesRouter.get("/", async (c) => {
 
   const conditions = [];
   if (q) {
-    // Quote each whitespace-separated token so user input can't inject FTS5
-    // query syntax; multiple words AND together.
-    const match = q
-      .split(/\s+/)
-      .map((word) => `"${word.replaceAll('"', '""')}"`)
-      .join(" ");
+    // Substring search on the trigram-indexed FTS table (works for any token
+    // length — Chinese words are often 2 chars, below MATCH's trigram floor).
+    // ESCAPE so % and _ in user input stay literal.
+    const likeGroups = q.split(/\s+/).map((token) => {
+      const pattern = `%${token
+        .replaceAll("\\", "\\\\")
+        .replaceAll("%", "\\%")
+        .replaceAll("_", "\\_")}%`;
+      return sql`(
+        title LIKE ${pattern} ESCAPE '\\'
+        OR summary LIKE ${pattern} ESCAPE '\\'
+        OR content LIKE ${pattern} ESCAPE '\\'
+      )`;
+    });
     const ftsRows = await db.all<{ article_id: string }>(
-      sql`SELECT article_id FROM articles_fts WHERE articles_fts MATCH ${match}`,
+      sql`SELECT article_id FROM articles_fts WHERE ${sql.join(likeGroups, sql` AND `)}`,
     );
     const ids = ftsRows.map((row) => row.article_id);
     if (ids.length === 0) return c.json([]);
@@ -46,6 +54,32 @@ articlesRouter.get("/", async (c) => {
     .orderBy(articles.publishedAt);
 
   return c.json(rows);
+});
+
+// POST /api/articles/read-all — mark every unread article read,
+// optionally scoped to one feed { feedId: string }
+articlesRouter.post("/read-all", async (c) => {
+  const db = c.get("db");
+
+  let body: unknown = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    // empty body = mark everything
+  }
+
+  const feedId = (body as Record<string, unknown>).feedId;
+  if (feedId !== undefined && typeof feedId !== "string") {
+    return c.json({ error: "feedId must be a string" }, 400);
+  }
+
+  const result = await db
+    .update(articles)
+    .set({ read: 1 })
+    .where(feedId ? and(eq(articles.read, 0), eq(articles.feedId, feedId)) : eq(articles.read, 0))
+    .run();
+
+  return c.json({ marked: result.rowsAffected });
 });
 
 // PATCH /api/articles/:id

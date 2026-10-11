@@ -130,6 +130,13 @@ export const articlesApi = {
     return request<Article[]>(`/articles${qs}`);
   },
 
+  readAll(feedId?: string): Promise<{ marked: number }> {
+    return request<{ marked: number }>("/articles/read-all", {
+      method: "POST",
+      body: JSON.stringify(feedId ? { feedId } : {}),
+    });
+  },
+
   update(id: string, data: UpdateArticle): Promise<Article> {
     return request<Article>(`/articles/${id}`, {
       method: "PATCH",

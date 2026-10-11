@@ -70,6 +70,7 @@ reed/
 | `POST` | `/api/feeds/:id/refresh` | Manually refresh a feed |
 | `GET` | `/api/articles` | List articles (`?feed_id=`, `?unread=true`, `?q=` full-text search) |
 | `PATCH` | `/api/articles/:id` | Mark read/unread `{ read: boolean }` |
+| `POST` | `/api/articles/read-all` | Mark all as read; `{ feedId }` scopes to one feed |
 
 All responses are JSON. Errors return `{ error: string }`.
 

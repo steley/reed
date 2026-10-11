@@ -1,6 +1,26 @@
 import type { Article, Feed } from "@reed/types";
-import { cleanSummary, feedDisplayName, relativeTime } from "../lib/display.ts";
-import { Menu, Refresh, Sort } from "./icons.tsx";
+import { cleanSummary, feedDisplayName, highlightParts, relativeTime } from "../lib/display.ts";
+import { MarkAllRead, Menu, Refresh, Sort } from "./icons.tsx";
+
+/** Render `text` with the search tokens wrapped in <mark>. */
+function Highlight({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <>{text}</>;
+  return (
+    <>
+      {highlightParts(text, query).map((part, i) =>
+        part.hit ? (
+          // biome-ignore lint/suspicious/noArrayIndexKey: static segments re-derived every render, never reordered
+          <mark key={i} className="rounded-[2px] bg-accent/20 text-inherit">
+            {part.text}
+          </mark>
+        ) : (
+          // biome-ignore lint/suspicious/noArrayIndexKey: static segments re-derived every render, never reordered
+          <span key={i}>{part.text}</span>
+        ),
+      )}
+    </>
+  );
+}
 
 interface Props {
   articles: Article[];
@@ -15,6 +35,7 @@ interface Props {
   onOpenMenu(): void;
   onSelectArticle(id: string): void;
   onToggleSort(): void;
+  onMarkAllRead(): void;
   onRefresh(): void;
 }
 
@@ -30,6 +51,7 @@ export function ArticleList({
   onOpenMenu,
   onSelectArticle,
   onToggleSort,
+  onMarkAllRead,
   onRefresh,
 }: Props) {
   const sorted = [...articles].sort((a, b) => {
@@ -37,6 +59,7 @@ export function ArticleList({
     const bv = b.publishedAt ?? 0;
     return sortAsc ? av - bv : bv - av;
   });
+  const hasUnread = articles.some((a) => a.read === 0);
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-canvas">
@@ -56,6 +79,17 @@ export function ArticleList({
             {articles.length}
           </span>
         </h1>
+        {hasUnread && (
+          <button
+            type="button"
+            onClick={onMarkAllRead}
+            aria-label="Mark all as read"
+            title="Mark all as read"
+            className="rounded-lg p-1.5 text-ink-3 transition-colors hover:bg-card hover:text-ink"
+          >
+            <MarkAllRead width={15} height={15} />
+          </button>
+        )}
         <button
           type="button"
           onClick={onToggleSort}
@@ -119,7 +153,7 @@ export function ArticleList({
                           unread ? "font-semibold text-ink" : "font-normal text-ink-2"
                         }`}
                       >
-                        {article.title ?? "(untitled)"}
+                        <Highlight text={article.title ?? "(untitled)"} query={searchQuery} />
                       </h2>
                       {unread && (
                         <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent" />
@@ -127,7 +161,7 @@ export function ArticleList({
                     </div>
                     {summary && (
                       <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-ink-2">
-                        {summary}
+                        <Highlight text={summary} query={searchQuery} />
                       </p>
                     )}
                     <p className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-3">

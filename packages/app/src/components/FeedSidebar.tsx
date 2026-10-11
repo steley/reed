@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Feed, Folder } from "@reed/types";
 import { avatarColor, compareNames, feedDisplayName } from "../lib/display.ts";
 import {
@@ -56,6 +56,7 @@ function FeedRow({
   indented,
   onSelect,
   onDelete,
+  onContext,
 }: {
   feed: Feed;
   name: string;
@@ -64,15 +65,32 @@ function FeedRow({
   indented: boolean;
   onSelect(): void;
   onDelete(): void;
+  onContext(x: number, y: number): void;
 }) {
+  // Long-press opens the context menu on touch (desktop uses right-click)
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const clearPress = () => clearTimeout(pressTimer.current);
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: native drag handle only; the interactive controls are the child buttons
+    // biome-ignore lint/a11y/noStaticElementInteractions: drag + context menu handle only; the interactive controls are the child buttons
     <div
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData("text/plain", feed.id);
         e.dataTransfer.effectAllowed = "move";
       }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onContext(e.clientX, e.clientY);
+      }}
+      onTouchStart={(e) => {
+        const touch = e.touches[0];
+        if (!touch) return;
+        const { clientX: x, clientY: y } = touch;
+        pressTimer.current = setTimeout(() => onContext(x, y), 500);
+      }}
+      onTouchMove={clearPress}
+      onTouchEnd={clearPress}
+      onTouchCancel={clearPress}
       className={`group flex select-none items-center rounded-lg pr-1.5 transition-colors ${
         indented ? "ml-6" : ""
       } ${selected ? "bg-card" : "hover:bg-card/60"}`}
@@ -129,8 +147,12 @@ export function FeedSidebar({
   onDeleteFeed,
   onClose,
 }: Props) {
-  // Right-click context menu target: { folderId, viewport x/y } | null
-  const [menu, setMenu] = useState<{ folderId: string; x: number; y: number } | null>(null);
+  // Right-click / long-press context menu target + viewport x/y.
+  // Folders get rename/delete; feeds get move-to-folder/delete.
+  type MenuState =
+    | { kind: "folder"; folderId: string; x: number; y: number }
+    | { kind: "feed"; feedId: string; x: number; y: number };
+  const [menu, setMenu] = useState<MenuState | null>(null);
   // Overflow menu (OPML import/export) anchored at its opening click
   const [opmlMenu, setOpmlMenu] = useState<{ x: number; y: number } | null>(null);
   // Folder id (or UNCATEGORIZED) currently highlighted as a drop target
@@ -218,6 +240,7 @@ export function FeedSidebar({
           indented={indented}
           onSelect={() => onSelectFeed(feed.id)}
           onDelete={() => onDeleteFeed(feed.id)}
+          onContext={(x, y) => setMenu({ kind: "feed", feedId: feed.id, x, y })}
         />
       </li>
     );
@@ -283,7 +306,12 @@ export function FeedSidebar({
                       <div
                         onContextMenu={(e) => {
                           e.preventDefault();
-                          setMenu({ folderId: folder.id, x: e.clientX, y: e.clientY });
+                          setMenu({
+                            kind: "folder",
+                            folderId: folder.id,
+                            x: e.clientX,
+                            y: e.clientY,
+                          });
                         }}
                         {...dropHandlers(folder.id, folder.id)}
                         className={`group flex select-none items-center rounded-lg pr-1.5 transition-colors ${
@@ -368,7 +396,7 @@ export function FeedSidebar({
         </div>
       </aside>
 
-      {/* Folder context menu (outside <aside>: fixed positioning would be
+      {/* Context menus (outside <aside>: fixed positioning would be
           contained by the aside's transform on mobile) */}
       {menu && (
         <>
@@ -381,47 +409,119 @@ export function FeedSidebar({
             }}
             aria-hidden
           />
-          <div
-            role="menu"
-            className="fixed z-50 min-w-32 rounded-lg border border-line bg-canvas py-1 shadow-xl"
-            style={{
-              left: Math.max(8, Math.min(menu.x, window.innerWidth - 150)),
-              top: Math.max(8, Math.min(menu.y, window.innerHeight - 90)),
-            }}
-          >
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                const { folderId } = menu;
-                setMenu(null);
-                onRenameFolder(folderId);
+          {menu.kind === "folder" ? (
+            <div
+              role="menu"
+              className="fixed z-50 min-w-32 rounded-lg border border-line bg-canvas py-1 shadow-xl"
+              style={{
+                left: Math.max(8, Math.min(menu.x, window.innerWidth - 150)),
+                top: Math.max(8, Math.min(menu.y, window.innerHeight - 90)),
               }}
-              className="block w-full px-3 py-1.5 text-left text-[13px] text-ink-2 hover:bg-card hover:text-ink"
             >
-              Rename
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                const { folderId } = menu;
-                setMenu(null);
-                const folder = folders.find((f) => f.id === folderId);
-                if (
-                  folder &&
-                  window.confirm(
-                    `Delete folder "${folder.name}"? Feeds inside will not be deleted.`,
-                  )
-                ) {
-                  onDeleteFolder(folderId);
-                }
-              }}
-              className="block w-full px-3 py-1.5 text-left text-[13px] text-ink-2 hover:bg-card hover:text-accent"
-            >
-              Delete
-            </button>
-          </div>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  const { folderId } = menu;
+                  setMenu(null);
+                  onRenameFolder(folderId);
+                }}
+                className="block w-full px-3 py-1.5 text-left text-[13px] text-ink-2 hover:bg-card hover:text-ink"
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  const { folderId } = menu;
+                  setMenu(null);
+                  const folder = folders.find((f) => f.id === folderId);
+                  if (
+                    folder &&
+                    window.confirm(
+                      `Delete folder "${folder.name}"? Feeds inside will not be deleted.`,
+                    )
+                  ) {
+                    onDeleteFolder(folderId);
+                  }
+                }}
+                className="block w-full px-3 py-1.5 text-left text-[13px] text-ink-2 hover:bg-card hover:text-accent"
+              >
+                Delete
+              </button>
+            </div>
+          ) : (
+            (() => {
+              const feed = feeds.find((f) => f.id === menu.feedId);
+              if (!feed) return null;
+              return (
+                <div
+                  role="menu"
+                  className="fixed z-50 max-h-72 min-w-44 overflow-y-auto rounded-lg border border-line bg-canvas py-1 shadow-xl"
+                  style={{
+                    left: Math.max(8, Math.min(menu.x, window.innerWidth - 180)),
+                    top: Math.max(8, Math.min(menu.y, window.innerHeight - 260)),
+                  }}
+                >
+                  <p className="px-3 pb-1 pt-1.5 text-[11px] font-medium tracking-widest text-ink-3 uppercase">
+                    Move to
+                  </p>
+                  {sortedFolders.map((folder) => (
+                    <button
+                      key={folder.id}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenu(null);
+                        onMoveFeed(feed.id, folder.id);
+                      }}
+                      className="flex w-full items-center justify-between px-3 py-1.5 text-left text-[13px] text-ink-2 hover:bg-card hover:text-ink"
+                    >
+                      <span className="truncate">{folder.name}</span>
+                      {feed.folderId === folder.id && (
+                        <span aria-hidden className="text-ink-3">
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenu(null);
+                      onMoveFeed(feed.id, null);
+                    }}
+                    className="flex w-full items-center justify-between px-3 py-1.5 text-left text-[13px] text-ink-2 hover:bg-card hover:text-ink"
+                  >
+                    <span>Uncategorized</span>
+                    {feed.folderId === null && (
+                      <span aria-hidden className="text-ink-3">
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                  <div className="my-1 border-t border-line" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenu(null);
+                      if (
+                        window.confirm(`Delete "${feedDisplayName(feed)}" and all its articles?`)
+                      ) {
+                        onDeleteFeed(feed.id);
+                      }
+                    }}
+                    className="block w-full px-3 py-1.5 text-left text-[13px] text-ink-2 hover:bg-card hover:text-accent"
+                  >
+                    Delete feed
+                  </button>
+                </div>
+              );
+            })()
+          )}
         </>
       )}
 

@@ -141,3 +141,10 @@ export const Ellipsis = (props: P) => (
     <circle cx="19" cy="12" r="0.8" fill="currentColor" />
   </svg>
 );
+
+export const MarkAllRead = (props: P) => (
+  <svg {...base(props)}>
+    <path d="M18 6 7 17l-4-4" />
+    <path d="m22 10-7.5 7.5L13 16" />
+  </svg>
+);

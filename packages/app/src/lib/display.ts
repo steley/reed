@@ -83,3 +83,23 @@ export function avatarColor(seed: string): { bg: string; fg: string } {
     fg: `oklch(0.42 0.11 ${hue})`,
   };
 }
+
+/**
+ * Split `text` into segments for client-side search highlighting: `hit` marks
+ * the parts matching any whitespace-separated token in `query` (case-
+ * insensitive, regex-safe). Mirrors the server's tokenization closely enough
+ * for display purposes — the server (LIKE on the trigram index) decides what
+ * matched; this only decides what to paint.
+ */
+export function highlightParts(text: string, query: string): Array<{ text: string; hit: boolean }> {
+  const tokens = query
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length > 0);
+  if (tokens.length === 0 || !text) return [{ text, hit: false }];
+  const pattern = tokens.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  return text
+    .split(new RegExp(`(${pattern})`, "gi"))
+    .map((part, i) => ({ text: part, hit: i % 2 === 1 }))
+    .filter((part) => part.text !== "");
+}
