@@ -2044,3 +2044,36 @@ beats presentational attribute hints, so images render at natural size,
 still capped by `max-width: 100%`. Deliberately done in CSS, not by
 stripping the attributes during extraction: one rule covers every feed,
 and the stored HTML keeps the source's own hints for any future consumer.
+
+### Fix en route: literal `<blockquote>` rendered as code + cron wiping full text (2026-10-11)
+Report via kuhung.me's "Pi 1.0 与 1.1" post: the AI-disclaimer blockquote
+rendered as a literal `<blockquote>` inside a code box, with its text
+outside the quote. Reproduced offline (site needs >10s; curl'd the page
+first — note our 10s FETCH_TIMEOUT_MS will fail this slow site entirely,
+separate concern, not touched).
+
+Two distinct bugs found:
+- **Render (reported)**: extracted content is already HTML, but
+  `ArticleReader` piped everything through `marked`. Readability output
+  keeps source whitespace, so a `<blockquote>` preceded by a blank line and
+  ~10 spaces of indentation hits marked's indented-code rule → literal
+  `<pre><code>&lt;blockquote&gt;</code></pre>`, the quote's text escaping
+  the block. Fix: `lib/render.ts` `renderArticleHtml()` — content starting
+  with an HTML tag (`/^\s*</`) skips marked and goes straight to DOMPurify;
+  markdown bodies keep the marked path. ArticleReader now uses it; marked
+  config moved there. Same mangle risk existed for HTML `content:encoded`
+  feeds — this covers them too.
+- **Data loss (found en route, worse)**: `refreshFeed()`'s update branch
+  wrote `content: article.content` unconditionally — kuhung-style feeds
+  (summary-only) would have the hourly cron NULL out the extracted full
+  text one hour after the backfill stored it. Fix: update branch takes
+  whichever of feed-provided vs stored content is longer ("content never
+  shrinks"). Discarded `article.content ?? existing.content` — a short
+  excerpt would still clobber a long stored body.
+
+Tests: `lib/render.test.ts` (markdown path, HTML-skip regression, sanitize
+in both paths), refresh tests for keep-longer + overwrite-longer. 28/28
+unit tests pass; DB tests still skipped locally (no TEST_DATABASE_URL).
+After deploying, re-run `pnpm --filter @reed/worker backfill` once — any
+article whose extracted content was already wiped by a cron run gets
+re-extracted (its content is NULL again).

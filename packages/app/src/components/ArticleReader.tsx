@@ -1,11 +1,8 @@
 import type { Article, Feed } from "@reed/types";
-import { marked } from "marked";
 import { useMemo } from "react";
 import { feedDisplayName, fullDate } from "../lib/display.ts";
-import { sanitizeArticleHtml } from "../lib/sanitize.ts";
+import { renderArticleHtml } from "../lib/render.ts";
 import { ArrowLeft, External, MarkUnread } from "./icons.tsx";
-
-marked.setOptions({ async: false, gfm: true, breaks: false });
 
 interface Props {
   article: Article | null;
@@ -17,8 +14,7 @@ interface Props {
 export function ArticleReader({ article, feed, onBack, onMarkRead }: Props) {
   const html = useMemo(() => {
     if (!article) return "";
-    const raw = article.content ?? article.summary ?? "";
-    return sanitizeArticleHtml(marked.parse(raw) as string);
+    return renderArticleHtml(article.content ?? article.summary ?? "");
   }, [article]);
 
   if (!article) {
@@ -90,7 +86,7 @@ export function ArticleReader({ article, feed, onBack, onMarkRead }: Props) {
             <span>{fullDate(article.publishedAt)}</span>
           </p>
           <hr className="my-7 border-line" />
-          {/* biome-ignore lint/security/noDangerouslySetInnerHtml: marked-parsed feed content, sanitized via DOMPurify (lib/sanitize.ts) */}
+          {/* biome-ignore lint/security/noDangerouslySetInnerHtml: rendered via lib/render.ts, sanitized via DOMPurify (lib/sanitize.ts) */}
           <div className="article-body" dangerouslySetInnerHTML={{ __html: html }} />
         </div>
       </article>

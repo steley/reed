@@ -22,7 +22,8 @@
     "drizzle-orm": "^0.41.0",
     "fast-xml-parser": "^4.5.3",
     "hono": "^4.12.9",
-    "linkedom": "^0.18.13"
+    "linkedom": "^0.18.13",
+    "marked": "^17.0.5"
   },
   "devDependencies": {
     "@hono/node-server": "^1.14.4",

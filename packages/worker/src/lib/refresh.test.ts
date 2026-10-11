@@ -151,6 +151,47 @@ describe("refreshFeed", () => {
     expect(stored[0]!.summary).toBe("Updated summary one");
   });
 
+  it("never shrinks stored content on upsert — feed dropping content keeps full text", async () => {
+    mockFetch(RSS_XML);
+    await refreshFeed(FEED_ID, db);
+
+    // Simulate stored extracted full text (longer than the feed's excerpt)
+    await db
+      .update(articles)
+      .set({ content: "<p>Very long extracted full text body</p>" })
+      .where(eq(articles.url, "https://blog.example.com/one"));
+
+    // Re-refresh: the feed no longer provides content for this article
+    mockFetch(RSS_XML_UPDATED);
+    await refreshFeed(FEED_ID, db);
+
+    const stored = await db
+      .select()
+      .from(articles)
+      .where(eq(articles.url, "https://blog.example.com/one"))
+      .limit(1);
+    expect(stored[0]!.content).toBe("<p>Very long extracted full text body</p>");
+  });
+
+  it("overwrites stored content when the feed provides a longer body", async () => {
+    mockFetch(RSS_XML);
+    await refreshFeed(FEED_ID, db);
+
+    const longer = RSS_XML.replace(
+      "<![CDATA[<p>Content one</p>]]>",
+      "<![CDATA[<p>Much longer replacement body from the feed</p>]]>",
+    );
+    mockFetch(longer);
+    await refreshFeed(FEED_ID, db);
+
+    const stored = await db
+      .select()
+      .from(articles)
+      .where(eq(articles.url, "https://blog.example.com/one"))
+      .limit(1);
+    expect(stored[0]!.content).toBe("<p>Much longer replacement body from the feed</p>");
+  });
+
   it("preserves read flag on upsert", async () => {
     mockFetch(RSS_XML);
     await refreshFeed(FEED_ID, db);

@@ -99,6 +99,9 @@ importers:
       linkedom:
         specifier: ^0.18.13
         version: 0.18.13
+      marked:
+        specifier: ^17.0.5
+        version: 17.0.5
     devDependencies:
       '@hono/node-server':
         specifier: ^1.14.4

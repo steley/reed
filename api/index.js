@@ -31501,12 +31501,12 @@ async function refreshFeed(feedId, db2) {
   const pending = [];
   for (const article of parsed.articles) {
     if (!article.url) continue;
-    const existingRows = await db2.select({ id: articles.id }).from(articles).where(and(eq(articles.feedId, feedId), eq(articles.url, article.url))).limit(1);
-    pending.push({ article, existingId: existingRows[0]?.id ?? null });
+    const existingRows = await db2.select({ id: articles.id, content: articles.content }).from(articles).where(and(eq(articles.feedId, feedId), eq(articles.url, article.url))).limit(1);
+    pending.push({ article, existing: existingRows[0] ?? null });
   }
   const extracted = /* @__PURE__ */ new Map();
   const candidates = pending.filter(
-    ({ article, existingId }) => existingId === null && (article.content?.length ?? 0) < MIN_FULLTEXT_CHARS && (article.summary?.length ?? 0) < MIN_FULLTEXT_CHARS
+    ({ article, existing }) => existing === null && (article.content?.length ?? 0) < MIN_FULLTEXT_CHARS && (article.summary?.length ?? 0) < MIN_FULLTEXT_CHARS
   );
   for (let i = 0; i < candidates.length; i += FULLTEXT_POOL) {
     const batch = candidates.slice(i, i + FULLTEXT_POOL);
@@ -31522,8 +31522,8 @@ async function refreshFeed(feedId, db2) {
   }
   let added = 0;
   let updated = 0;
-  for (const { article, existingId } of pending) {
-    if (existingId === null) {
+  for (const { article, existing } of pending) {
+    if (existing === null) {
       await db2.insert(articles).values({
         id: crypto.randomUUID(),
         feedId,
@@ -31536,12 +31536,13 @@ async function refreshFeed(feedId, db2) {
       });
       added++;
     } else {
+      const content = (article.content?.length ?? 0) > (existing.content?.length ?? 0) ? article.content : existing.content ?? article.content;
       await db2.update(articles).set({
         title: article.title,
         summary: article.summary,
-        content: article.content,
+        content,
         publishedAt: article.publishedAt
-      }).where(eq(articles.id, existingId));
+      }).where(eq(articles.id, existing.id));
       updated++;
     }
   }

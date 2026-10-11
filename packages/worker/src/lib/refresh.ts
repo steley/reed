@@ -170,15 +170,18 @@ export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult
   // subscribing to the same feed URL each keep their own article rows.
   // Existence is resolved first so full text can be prefetched for exactly
   // the new articles that need it.
-  const pending: { article: ParsedArticle; existingId: string | null }[] = [];
+  const pending: {
+    article: ParsedArticle;
+    existing: { id: string; content: string | null } | null;
+  }[] = [];
   for (const article of parsed.articles) {
     if (!article.url) continue;
     const existingRows = await db
-      .select({ id: articles.id })
+      .select({ id: articles.id, content: articles.content })
       .from(articles)
       .where(and(eq(articles.feedId, feedId), eq(articles.url, article.url)))
       .limit(1);
-    pending.push({ article, existingId: existingRows[0]?.id ?? null });
+    pending.push({ article, existing: existingRows[0] ?? null });
   }
 
   // Full-text prefetch: only new articles where the feed gave neither content
@@ -186,8 +189,8 @@ export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult
   // serialize ten 10s timeouts against one dead site.
   const extracted = new Map<string, string>();
   const candidates = pending.filter(
-    ({ article, existingId }) =>
-      existingId === null &&
+    ({ article, existing }) =>
+      existing === null &&
       (article.content?.length ?? 0) < MIN_FULLTEXT_CHARS &&
       (article.summary?.length ?? 0) < MIN_FULLTEXT_CHARS,
   );
@@ -207,8 +210,8 @@ export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult
   let added = 0;
   let updated = 0;
 
-  for (const { article, existingId } of pending) {
-    if (existingId === null) {
+  for (const { article, existing } of pending) {
+    if (existing === null) {
       await db.insert(articles).values({
         id: crypto.randomUUID(),
         feedId,
@@ -221,15 +224,22 @@ export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult
       });
       added++;
     } else {
+      // Content never shrinks: a feed that stops providing content (or
+      // provides only an excerpt) must not wipe full text a previous run
+      // stored — feed-provided or extracted. Longer body wins.
+      const content =
+        (article.content?.length ?? 0) > (existing.content?.length ?? 0)
+          ? article.content
+          : (existing.content ?? article.content);
       await db
         .update(articles)
         .set({
           title: article.title,
           summary: article.summary,
-          content: article.content,
+          content,
           publishedAt: article.publishedAt,
         })
-        .where(eq(articles.id, existingId));
+        .where(eq(articles.id, existing.id));
       updated++;
     }
   }
