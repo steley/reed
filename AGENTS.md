@@ -337,6 +337,7 @@ repository secrets; locally they can be exported in the shell or set per-command
 - **Auto-mark-read:** selecting an article marks it read automatically.
 - **List payloads omit `content`:** `GET /api/articles` returns `ArticleListItem` (`Omit<Article, "content">`) — the full body column was making feed switches drag megabytes over the wire. App state `articles`/`unreadList` are `ArticleListItem[]`; opening an article fetches the full row via `articlesApi.get(id)` (`fullArticle` state in App, cancelled-flag race guard) and the reader renders summary-derived content first, swapping to the full body when it lands. Never widen a list select back to `db.select().from(articles)`.
 - **Feed-switch loading state:** a feed switch clears `articles` immediately and shows "Loading…" in the list pane (`isLoadingArticles`); search keystrokes keep the current list visible until the fresh response lands — only feed switches clear.
+- **Stale-while-revalidate caches (App.tsx):** two `useRef` Maps make repeat visits instant — `articlesCache` (per feed id, `"all"` for unfiltered; list summaries only, search responses never cached) and `fullCache` (full article bodies, immutable → no invalidation, capped at 50 entries). A cache hit paints immediately while the same fetch as before still runs and replaces the view on landing, so nothing can go stale for more than one round trip — no invalidation wiring beyond `handleMarkRead` writing its change through to `articlesCache`.
 
 ## General Conventions
 

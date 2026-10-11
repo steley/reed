@@ -1644,3 +1644,44 @@ feed's cards lingered, then swapped at once).
 ### Deliberately NOT done
 - No client-side per-feed cache yet (see decision above).
 - No virtualized list — row count unchanged by this change.
+
+---
+
+## Increment — Stale-while-revalidate caches for feed/article switching
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was built
+After stripping `content` from list payloads, switching still cost one full
+round trip per click. Two client-side caches in App.tsx now make repeat visits
+instant:
+
+- `articlesCache` (`Map<feedId | "all", ArticleListItem[]>`) — write-through on
+  every un-searched `reloadArticles`. On a feed switch, a cache hit paints
+  immediately (no spinner) while the same background fetch as before still
+  runs and swaps in the fresh list on landing.
+- `fullCache` (`Map<articleId, Article>`, capped at 50, FIFO-evict) — full
+  bodies are immutable per article, so cache hits skip the fetch entirely.
+
+### Decisions made
+- **SWR over invalidate-on-mutate:** the background revalidate runs on every
+  switch regardless, so cache can never be wrong for more than one round trip
+  and there is no invalidation wiring to get wrong. The revalidate request is
+  exactly the request we were already making — zero extra traffic vs. no cache.
+- Only `handleMarkRead` writes through to `articlesCache` (unread-dot flash on
+  feed A → B → A was the one visible staleness); read-all/refresh/delete
+  rewrite the current view's entry via reloadArticles, and other feeds'
+  entries self-heal on their next revalidate.
+- Full-body cache deliberately skips revalidation: content comes from the feed
+  parse and only changes on refresh, and a stale `read` flag is invisible
+  (the reader doesn't display read state).
+
+### Bug fixed en route
+Opening article B right after A briefly rendered A's full body under B's
+title: `fullArticle` state held the previous article until the new fetch
+landed, and it took precedence over the summary merge. The effect now resets
+to the cached-or-null value first.
+
+### Deliberately NOT done
+- No prefetch of unvisited feeds (N requests per load for a maybe).
+- No debounce on search — payloads are small now.

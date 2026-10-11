@@ -40,6 +40,13 @@ export function App() {
     foldersApi.list().then(setFolders).catch(console.error);
   }, []);
 
+  // Stale-while-revalidate cache of per-feed list responses (summaries only —
+  // small). Key: feedId, "all" for the unfiltered view. Search responses are
+  // never cached. A cache hit paints instantly while the fetch still runs and
+  // swaps in the fresh list when it lands, so read-state can't go stale for
+  // more than one round trip.
+  const articlesCache = useRef(new Map<string, ArticleListItem[]>());
+
   const reloadArticles = useCallback(
     async (feedId: string | null, q?: string, signal?: AbortSignal) => {
       const query = q?.trim();
@@ -47,7 +54,9 @@ export function App() {
         ...(feedId ? { feedId } : {}),
         ...(query ? { q: query } : {}),
       };
-      setArticles(await articlesApi.list(opts, signal));
+      const list = await articlesApi.list(opts, signal);
+      setArticles(list);
+      if (!query) articlesCache.current.set(feedId ?? "all", list);
     },
     [],
   );
@@ -66,8 +75,13 @@ export function App() {
     const feedChanged = prevFeedId.current !== selectedFeedId;
     prevFeedId.current = selectedFeedId;
     if (feedChanged) setArticles([]);
-    setIsLoadingArticles(true);
     setSelectedArticleId(null);
+    // Cache hit: paint the last known list now (no spinner); the fetch below
+    // still runs and replaces the view when the fresh response lands.
+    const cached = searchQuery.trim()
+      ? undefined
+      : articlesCache.current.get(selectedFeedId ?? "all");
+    setIsLoadingArticles(!cached);
     reloadArticles(selectedFeedId, searchQuery, controller.signal)
       .catch((err: unknown) => {
         if ((err as Error).name !== "AbortError") console.error(err);
@@ -107,17 +121,30 @@ export function App() {
 
   // List rows omit `content` — fetch the full article when one is opened.
   // Title/summary render immediately from the list row; the body swaps to the
-  // full content when the fetch lands.
+  // full content when the fetch lands. Bodies are immutable per article, so
+  // they cache without invalidation (read-state staleness is invisible — the
+  // reader doesn't display it).
   const [fullArticle, setFullArticle] = useState<Article | null>(null);
+  const fullCache = useRef(new Map<string, Article>());
   useEffect(() => {
     if (!selectedArticleId) {
       setFullArticle(null);
       return;
     }
+    // Reset first — never show the previously opened article's body here
+    const cached = fullCache.current.get(selectedArticleId) ?? null;
+    setFullArticle(cached);
+    if (cached) return;
     let cancelled = false;
     articlesApi
       .get(selectedArticleId)
       .then((a) => {
+        // ponytail: cap at 50 full bodies (~MBs); LRU-evict if sessions grow
+        if (fullCache.current.size >= 50) {
+          const oldest = fullCache.current.keys().next().value;
+          if (oldest !== undefined) fullCache.current.delete(oldest);
+        }
+        fullCache.current.set(selectedArticleId, a);
         if (!cancelled) setFullArticle(a);
       })
       .catch((err: unknown) => {
@@ -199,7 +226,14 @@ export function App() {
   const handleMarkRead = useCallback(async (id: string, read: boolean) => {
     try {
       const updated = await articlesApi.update(id, { read });
-      setArticles((prev) => prev.map((a) => (a.id === id ? updated : a)));
+      const mark = (list: ArticleListItem[]) => list.map((a) => (a.id === id ? updated : a));
+      setArticles(mark);
+      // Keep the SWR cache honest so switching back doesn't flash stale
+      // read-state before the background revalidate lands
+      for (const key of [updated.feedId, "all"]) {
+        const entry = articlesCache.current.get(key);
+        if (entry) articlesCache.current.set(key, mark(entry));
+      }
       setUnreadList((prev) =>
         read
           ? prev.filter((a) => a.id !== id)
