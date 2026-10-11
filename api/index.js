@@ -1800,7 +1800,7 @@ var require_XMLParser = __commonJS({
     var OrderedObjParser = require_OrderedObjParser();
     var { prettify } = require_node2json();
     var validator = require_validator();
-    var XMLParser2 = class {
+    var XMLParser3 = class {
       constructor(options) {
         this.externalEntities = {};
         this.options = buildOptions(options);
@@ -1850,7 +1850,7 @@ var require_XMLParser = __commonJS({
         }
       }
     };
-    module2.exports = XMLParser2;
+    module2.exports = XMLParser3;
   }
 });
 
@@ -2253,10 +2253,10 @@ var require_fxp = __commonJS({
   "../../node_modules/.pnpm/fast-xml-parser@4.5.5/node_modules/fast-xml-parser/src/fxp.js"(exports2, module2) {
     "use strict";
     var validator = require_validator();
-    var XMLParser2 = require_XMLParser();
+    var XMLParser3 = require_XMLParser();
     var XMLBuilder = require_json2xml();
     module2.exports = {
-      XMLParser: XMLParser2,
+      XMLParser: XMLParser3,
       XMLValidator: validator,
       XMLBuilder
     };
@@ -14719,6 +14719,158 @@ foldersRouter.delete("/:id", async (c) => {
   return new Response(null, { status: 204 });
 });
 
+// src/lib/opml.ts
+var import_fast_xml_parser2 = __toESM(require_fxp(), 1);
+var parser2 = new import_fast_xml_parser2.XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_"
+});
+function toArray(value) {
+  if (value === void 0 || value === null)
+    return [];
+  if (Array.isArray(value))
+    return value;
+  return [value];
+}
+function collectOutlines(nodes, folder, out) {
+  for (const node of nodes) {
+    const xmlUrl = node["@_xmlUrl"];
+    if (typeof xmlUrl === "string" && xmlUrl.trim()) {
+      const text3 = node["@_text"] ?? node["@_title"];
+      out.push({
+        url: xmlUrl.trim(),
+        title: typeof text3 === "string" && text3.trim() ? text3.trim() : null,
+        folder
+      });
+      continue;
+    }
+    const text2 = node["@_text"] ?? node["@_title"];
+    const name = typeof text2 === "string" && text2.trim() ? text2.trim() : folder;
+    collectOutlines(toArray(node["outline"]), name, out);
+  }
+}
+function parseOpml(xml) {
+  let parsed;
+  try {
+    parsed = parser2.parse(xml);
+  } catch {
+    return null;
+  }
+  const opml = parsed["opml"];
+  if (!opml)
+    return null;
+  const head = opml["head"];
+  const headTitle = head?.["title"];
+  const feeds2 = [];
+  const body = opml["body"];
+  collectOutlines(toArray(body?.["outline"]), null, feeds2);
+  return {
+    title: typeof headTitle === "string" ? headTitle : null,
+    feeds: feeds2
+  };
+}
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function buildOpml(data) {
+  const lines = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<opml version="2.0">',
+    "  <head>",
+    `    <title>${esc(data.title ?? "Reed subscriptions")}</title>`,
+    "  </head>",
+    "  <body>"
+  ];
+  const uncategorized = data.feeds.filter((f) => f.folder === null);
+  const folders2 = [
+    ...new Set(data.feeds.map((f) => f.folder).filter((f) => f !== null))
+  ];
+  for (const feed of uncategorized) {
+    lines.push(
+      `    <outline type="rss" text="${esc(feed.title ?? feed.url)}" xmlUrl="${esc(feed.url)}" />`
+    );
+  }
+  for (const folder of folders2) {
+    lines.push(`    <outline text="${esc(folder)}">`);
+    for (const feed of data.feeds.filter((f) => f.folder === folder)) {
+      lines.push(
+        `      <outline type="rss" text="${esc(feed.title ?? feed.url)}" xmlUrl="${esc(feed.url)}" />`
+      );
+    }
+    lines.push("    </outline>");
+  }
+  lines.push("  </body>", "</opml>", "");
+  return lines.join("\n");
+}
+
+// src/worker/routes/opml.ts
+var opmlRouter = new Hono2();
+opmlRouter.get("/", async (c) => {
+  const db = c.get("db");
+  const [folderRows, feedRows] = await Promise.all([
+    db.select().from(folders),
+    db.select().from(feeds)
+  ]);
+  const folderNames = new Map(folderRows.map((f) => [f.id, f.name]));
+  const xml = buildOpml({
+    title: "Reed subscriptions",
+    feeds: feedRows.map((f) => ({
+      url: f.url,
+      title: f.title,
+      folder: f.folderId ? folderNames.get(f.folderId) ?? null : null
+    }))
+  });
+  return new Response(xml, {
+    headers: {
+      "Content-Type": "text/xml; charset=utf-8",
+      "Content-Disposition": 'attachment; filename="reed.opml"'
+    }
+  });
+});
+opmlRouter.post("/", async (c) => {
+  const xml = await c.req.text();
+  const data = parseOpml(xml);
+  if (!data) {
+    return c.json({ error: "Invalid OPML file" }, 400);
+  }
+  if (data.feeds.length === 0) {
+    return c.json({ error: "No feeds found in OPML" }, 400);
+  }
+  const db = c.get("db");
+  const existingUrls = new Set((await db.select({ url: feeds.url }).from(feeds)).map((r) => r.url));
+  const existingFolders = new Map((await db.select().from(folders)).map((f) => [f.name, f.id]));
+  let feedsAdded = 0;
+  let foldersCreated = 0;
+  let feedsSkipped = 0;
+  const now = Date.now();
+  for (const item of data.feeds) {
+    if (existingUrls.has(item.url)) {
+      feedsSkipped++;
+      continue;
+    }
+    let folderId = null;
+    if (item.folder) {
+      folderId = existingFolders.get(item.folder) ?? null;
+      if (!folderId) {
+        folderId = crypto.randomUUID();
+        await db.insert(folders).values({ id: folderId, name: item.folder, createdAt: now });
+        existingFolders.set(item.folder, folderId);
+        foldersCreated++;
+      }
+    }
+    await db.insert(feeds).values({
+      id: crypto.randomUUID(),
+      url: item.url,
+      title: item.title,
+      folderId,
+      createdAt: now
+    });
+    existingUrls.add(item.url);
+    feedsAdded++;
+  }
+  return c.json({ feedsAdded, foldersCreated, feedsSkipped });
+});
+
 // src/worker/index.ts
 function createApp(dbOverride) {
   const app2 = new Hono2();
@@ -14749,6 +14901,7 @@ function createApp(dbOverride) {
   app2.route("/api/feeds", feedsRouter);
   app2.route("/api/folders", foldersRouter);
   app2.route("/api/articles", articlesRouter);
+  app2.route("/api/opml", opmlRouter);
   app2.notFound((c) => c.json({ error: "Not found" }, 404));
   return app2;
 }

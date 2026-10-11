@@ -227,6 +227,8 @@ Base path: `/api`
 | `DELETE` | `/api/folders/:id` | Delete folder; member feeds become uncategorized (not deleted) → `204` |
 | `GET` | `/api/articles` | List articles. Query params: `feed_id`, `folder_id`, `unread=true` |
 | `PATCH` | `/api/articles/:id` | Update article `{ read: boolean }` → `200` |
+| `GET` | `/api/opml` | Export all feeds as OPML 2.0 XML download (`reed.opml`) |
+| `POST` | `/api/opml` | Import OPML body → `200 { feedsAdded, foldersCreated, feedsSkipped }`; feeds dedupe by URL (existing skipped, never moved), folders dedupe by name (reused or created). No fetch triggered — hourly cron picks up new feeds |
 
 All error responses: `{ error: string }` with appropriate HTTP status.
 
@@ -264,6 +266,7 @@ repository secrets; locally they can be exported in the shell or set per-command
 - **Summary cleaning:** list-card summaries go through `cleanSummary()` in `lib/display.ts` (strips HTML + HN-style metadata blocks). Feed display names fall back to URL hostname via `feedDisplayName()` — never render a raw URL in the sidebar.
 - **Layout:** three panes — sidebar (w-64, mobile drawer with scrim), list (`md:w-[380px]`), reader (flex-1). On mobile the list and reader swap by `selectedArticle` state; no routing library.
 - **Folders:** sidebar groups feeds into folders (`Folders` section + uncategorized `Feeds` section). Order is auto-ascending by display name via `compareNames()` (`localeCompare`, handles mixed Chinese/English) — no manual ordering, no order columns. Folder rows expand/collapse on click (chevron): default collapsed, auto-expanded while the folder has unread articles or contains the selected feed; manual choices live in a `expandOverride` map in `FeedSidebar` local state (session-only). Collapsing a folder that holds the selected feed deselects it first (`onSelectFeed(null)`) so the active row never hides itself. Feeds move via native HTML5 drag-and-drop (`draggable` rows; folder rows and the uncategorized section are drop targets → `PATCH /api/feeds/:id`) — dropping onto a collapsed folder works. Folders rename/delete via a hand-rolled right-click context menu (`FeedSidebar.tsx`); `NameDialog.tsx` is the shared single-name prompt for create/rename. The context menu must render outside the `<aside>` element — the aside's translate transform makes it the containing block for `position: fixed` descendants. HTML5 DnD does not work on touch; there is no mobile path to assign folders yet. The server's `GET /api/articles?folder_id=` filter has no UI consumer since folder article views were removed — kept as API surface (CLI).
+- **OPML import/export:** `···` button in the sidebar wordmark row opens a menu (Import OPML… / Export OPML), rendered outside the `<aside>` like the folder context menu. Export is a plain `<a href="/api/opml">` — the API's `Content-Disposition` triggers the download, no fetch wrapper. Import goes through `ImportOpmlDialog.tsx` (`file.text()` → POST `/api/opml`) and App reloads feeds+folders afterwards; the dialog shows result counts and a Done button. Import semantics are server-side (see API table): additive only, URL-dedupe for feeds, name-dedupe for folders. Parsing/generation lives in `worker/src/lib/opml.ts` on the existing `fast-xml-parser` dep — no OPML library.
 - **Article content rendering:** `marked` converts markdown → HTML, injected via `dangerouslySetInnerHTML`. 
 - **Sort order:** client-side by `publishedAt ?? createdAt`, toggleable newest/oldest. Default newest-first.
 - **Unread counts:** sidebar badges derive from a dedicated full unread fetch (`articlesApi.list({ unread: true })` → `unreadList` in App), never from the view-scoped `articles` state — that list is filtered by the current feed selection, so counts derived from it would vanish the moment a feed is selected. `handleMarkRead` keeps `unreadList` in sync for immediate feedback.
@@ -363,6 +366,6 @@ pnpm --filter @reed/worker db:export-d1   # then: turso db shell <db> < dump.sql
 |-------|--------|-------------|
 | 1 | Complete | API layer — Hono, Turso, REST endpoints, GH Actions refresh, Vitest |
 | 2 | Complete | Frontend — React, Vite, Tailwind v4 (Reeder-style rewrite 2026-10-10), static hosting on Vercel |
-| 3 | Deferred | Auth, CLI tool, FTS5 search, OPML import/export |
+| 3 | Deferred | Auth, CLI tool, FTS5 search (OPML import/export shipped 2026-10-11) |
 
 See `WORKLOG.md` for increment-by-increment progress and decisions.

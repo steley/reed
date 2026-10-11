@@ -133,3 +133,11 @@ export const ChevronRight = (props: P) => (
     <path d="m9 18 6-6-6-6" />
   </svg>
 );
+
+export const Ellipsis = (props: P) => (
+  <svg {...base(props)}>
+    <circle cx="5" cy="12" r="0.8" fill="currentColor" />
+    <circle cx="12" cy="12" r="0.8" fill="currentColor" />
+    <circle cx="19" cy="12" r="0.8" fill="currentColor" />
+  </svg>
+);

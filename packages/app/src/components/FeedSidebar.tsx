@@ -3,6 +3,7 @@ import type { Feed, Folder } from "@reed/types";
 import { avatarColor, compareNames, feedDisplayName } from "../lib/display.ts";
 import {
   ChevronRight,
+  Ellipsis,
   Folder as FolderIcon,
   FolderPlus,
   Moon,
@@ -23,6 +24,7 @@ interface Props {
   onSelectFeed(id: string | null): void;
   onAddFeed(): void;
   onAddFolder(): void;
+  onImportOpml(): void;
   onRenameFolder(id: string): void;
   onDeleteFolder(id: string): void;
   onMoveFeed(feedId: string, folderId: string | null): void;
@@ -119,6 +121,7 @@ export function FeedSidebar({
   onSelectFeed,
   onAddFeed,
   onAddFolder,
+  onImportOpml,
   onRenameFolder,
   onDeleteFolder,
   onMoveFeed,
@@ -128,6 +131,8 @@ export function FeedSidebar({
 }: Props) {
   // Right-click context menu target: { folderId, viewport x/y } | null
   const [menu, setMenu] = useState<{ folderId: string; x: number; y: number } | null>(null);
+  // Overflow menu (OPML import/export) anchored at its opening click
+  const [opmlMenu, setOpmlMenu] = useState<{ x: number; y: number } | null>(null);
   // Folder id (or UNCATEGORIZED) currently highlighted as a drop target
   const [dragOver, setDragOver] = useState<string | null>(null);
   // Manual expand/collapse choices; unset folders fall back to the auto rule
@@ -144,13 +149,16 @@ export function FeedSidebar({
   );
 
   useEffect(() => {
-    if (!menu) return;
+    if (!menu && !opmlMenu) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenu(null);
+      if (e.key === "Escape") {
+        setMenu(null);
+        setOpmlMenu(null);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [menu]);
+  }, [menu, opmlMenu]);
 
   const folderUnread = (folderId: string) =>
     sortedFeeds
@@ -231,6 +239,14 @@ export function FeedSidebar({
         <div className="flex items-center gap-2 px-5 pb-4 pt-5">
           <ReedMark width={22} height={22} />
           <span className="text-[15px] font-semibold tracking-tight">Reed</span>
+          <button
+            type="button"
+            aria-label="Import / export subscriptions"
+            onClick={(e) => setOpmlMenu({ x: e.clientX, y: e.clientY })}
+            className="ml-auto rounded-lg p-1.5 text-ink-3 transition-colors hover:bg-card hover:text-ink"
+          >
+            <Ellipsis width={15} height={15} />
+          </button>
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-3">
@@ -405,6 +421,41 @@ export function FeedSidebar({
             >
               Delete
             </button>
+          </div>
+        </>
+      )}
+
+      {/* Import/export menu (outside <aside> for the same fixed-position reason) */}
+      {opmlMenu && (
+        <>
+          <div className="fixed inset-0 z-50" onClick={() => setOpmlMenu(null)} aria-hidden />
+          <div
+            role="menu"
+            className="fixed z-50 min-w-40 rounded-lg border border-line bg-canvas py-1 shadow-xl"
+            style={{
+              left: Math.max(8, Math.min(opmlMenu.x, window.innerWidth - 170)),
+              top: Math.max(8, Math.min(opmlMenu.y, window.innerHeight - 100)),
+            }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpmlMenu(null);
+                onImportOpml();
+              }}
+              className="block w-full px-3 py-1.5 text-left text-[13px] text-ink-2 hover:bg-card hover:text-ink"
+            >
+              Import OPML…
+            </button>
+            <a
+              role="menuitem"
+              href="/api/opml"
+              onClick={() => setOpmlMenu(null)}
+              className="block w-full px-3 py-1.5 text-left text-[13px] text-ink-2 hover:bg-card hover:text-ink"
+            >
+              Export OPML
+            </a>
           </div>
         </>
       )}

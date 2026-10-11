@@ -1260,3 +1260,68 @@ dependencies flagged.
 - Verified in browser: select feed → all badges persist; open article →
   its feed/folder/total badges decrement immediately; Mark unread → they
   restore.
+
+---
+
+## Increment — OPML import/export
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was built
+- `GET /api/opml` — export every feed as OPML 2.0 (`text/xml`, `Content-Disposition:
+  attachment; filename="reed.opml"`). Foldered feeds nest one level under a
+  `<outline text="FolderName">`; uncategorized feeds sit at the top level of `<body>`.
+- `POST /api/opml` — import an OPML body. Feeds match by URL (existing → skipped
+  untouched, no folder move), folders match by name (reused, or created on demand).
+  Returns `{ feedsAdded, foldersCreated, feedsSkipped }`. Import does NOT trigger
+  fetching — the hourly cron picks up new feeds.
+- `packages/worker/src/lib/opml.ts` — `parseOpml()` / `buildOpml()` on the existing
+  `fast-xml-parser` dep. Parse walks outlines recursively, so feeds nested deeper
+  than one level attach to their nearest folder ancestor; build emits one folder
+  outline per folder (first-appearance order), uncategorized feeds first.
+- UI: a `···` button in the sidebar wordmark row opens a small menu (Import OPML… /
+  Export OPML). Export is a plain `<a href="/api/opml">` — no fetch wrapper needed,
+  the Content-Disposition header does the download. Import opens
+  `ImportOpmlDialog.tsx` (AddFeedDialog variant): file input → FileReader-less
+  `file.text()` → POST → success message with counts → Done. App reloads
+  feeds + folders after import.
+- Menu renders outside the `<aside>` (same fixed-position/containing-block rule as
+  the folder context menu) and closes on overlay click or Escape.
+
+### Decisions made
+- **No new dependencies:** OPML is just XML — the installed `fast-xml-parser` parses
+  and (via string building) generates it. An OPML library would be more code than
+  the ~120 lines here.
+- **URL-based feed dedupe, name-based folder dedupe:** `feeds.url` already has a
+  UNIQUE constraint; re-importing a list is idempotent. Existing feeds are never
+  moved into imported folders — import is additive only, so it can't rearrange an
+  existing subscription list by accident.
+- **Recursive outline walk over strict one-level:** recursion is barely more code
+  and degrades gracefully on nested-folder exports from other readers (feed lands
+  in its nearest named ancestor folder).
+- **No refresh on import:** importing 50 feeds shouldn't hang the request on 50
+  upstream fetches; the hourly GH Actions cron (or a manual Refresh) fills them in.
+  The dialog says so: "New feeds will fill in with the next refresh."
+- **Ellipsis menu in the wordmark row** instead of a settings page or extra footer
+  rows: single-user app, two items, already-established menu pattern to reuse.
+- **biome's `noAutofocus`** forbids the autoFocus attribute — the dialog focuses
+  its primary button via ref + setTimeout in the open effect, matching
+  AddFeedDialog.
+
+### Gotchas
+- `/api/health` always calls `getDb()` directly and ignores the dev.ts db override,
+  so it reports "degraded" against a `file:` URL even when every other route works.
+  Not a bug in the new code — just confusing the first time you see it in local dev.
+- In-app browser automation can't drive the native file chooser, but setting
+  `input.files` via a `DataTransfer` + dispatched `change` event from page context
+  exercises the real React onChange → POST → success-message flow.
+- `buildOpml` emits uncategorized feeds before foldered ones — round-trip tests
+  must expect that order.
+
+### Verification
+- 11 new tests (`src/worker/opml.test.ts`): parse (folders, non-OPML, broken XML),
+  build (escaping, round-trip), GET export headers + body, POST import (counts,
+  skip-existing without moving, reuse existing folder, 400s).
+- Driven in the real UI: menu opens, Export href `/api/opml`, dialog file-pick →
+  Import → "Imported 2 feeds, created 1 folder, skipped 0 duplicates." → sidebar
+  shows the new folder + feed → export round-trips the imported data.

@@ -4,8 +4,9 @@ import { AddFeedDialog } from "./components/AddFeedDialog.tsx";
 import { ArticleList } from "./components/ArticleList.tsx";
 import { ArticleReader } from "./components/ArticleReader.tsx";
 import { FeedSidebar } from "./components/FeedSidebar.tsx";
+import { ImportOpmlDialog } from "./components/ImportOpmlDialog.tsx";
 import { NameDialog } from "./components/NameDialog.tsx";
-import { articlesApi, feedsApi, foldersApi } from "./lib/api.ts";
+import { articlesApi, feedsApi, foldersApi, opmlApi } from "./lib/api.ts";
 
 const THEME_KEY = "reed-theme";
 
@@ -16,6 +17,7 @@ export function App() {
   const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [addFeedOpen, setAddFeedOpen] = useState(false);
+  const [importOpmlOpen, setImportOpmlOpen] = useState(false);
   // folderId null = create mode; set = rename mode, initial = current name
   const [folderDialog, setFolderDialog] = useState<{
     folderId: string | null;
@@ -179,6 +181,16 @@ export function App() {
     [feeds],
   );
 
+  const handleImportOpml = useCallback(async (text: string) => {
+    const result = await opmlApi.import(text);
+    // Pick up the new feeds/folders (and folder assignment for skipped feeds,
+    // which is deliberately untouched server-side — a full reload is simplest)
+    const [feedList, folderList] = await Promise.all([feedsApi.list(), foldersApi.list()]);
+    setFeeds(feedList);
+    setFolders(folderList);
+    return result;
+  }, []);
+
   return (
     <div className="flex h-dvh overflow-hidden bg-canvas text-ink">
       <FeedSidebar
@@ -192,6 +204,7 @@ export function App() {
         onSelectFeed={handleSelectFeed}
         onAddFeed={() => setAddFeedOpen(true)}
         onAddFolder={() => setFolderDialog({ folderId: null, initial: "" })}
+        onImportOpml={() => setImportOpmlOpen(true)}
         onRenameFolder={(id) =>
           setFolderDialog({
             folderId: id,
@@ -236,6 +249,11 @@ export function App() {
       </div>
 
       <AddFeedDialog open={addFeedOpen} onOpenChange={setAddFeedOpen} onAdd={handleAddFeed} />
+      <ImportOpmlDialog
+        open={importOpmlOpen}
+        onOpenChange={setImportOpmlOpen}
+        onImport={handleImportOpml}
+      />
       <NameDialog
         open={folderDialog !== null}
         title={folderDialog?.folderId ? "Rename folder" : "New folder"}

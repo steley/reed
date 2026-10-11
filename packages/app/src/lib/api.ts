@@ -95,6 +95,28 @@ export const foldersApi = {
 };
 
 // ---------------------------------------------------------------------------
+// OPML
+// ---------------------------------------------------------------------------
+
+export interface OpmlImportResult {
+  feedsAdded: number;
+  foldersCreated: number;
+  feedsSkipped: number;
+}
+
+export const opmlApi = {
+  import(text: string): Promise<OpmlImportResult> {
+    return request<OpmlImportResult>("/opml", {
+      method: "POST",
+      headers: { "Content-Type": "text/xml" },
+      body: text,
+    });
+  },
+  // Export needs no fetch wrapper — a plain <a href="/api/opml"> triggers the
+  // browser download via the Content-Disposition header.
+};
+
+// ---------------------------------------------------------------------------
 // Articles
 // ---------------------------------------------------------------------------
 
