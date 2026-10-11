@@ -4,6 +4,23 @@ import { fetchWithGuards } from "./refresh.ts";
 
 const ACCEPT_HTML = "text/html,application/xhtml+xml,*/*;q=0.8";
 
+// Upstream _headerDuplicatesTitle uses token-overlap similarity, which
+// misfires on CJK: a section heading sharing one Latin token with the page
+// title ("Foundermail 的缺点" vs "FounderMail - 免费的域名邮箱") scored
+// 0.81 and was deleted mid-article. A title-duplicate heading is one that
+// IS the title — require normalized containment instead of token overlap.
+{
+  const proto = Readability.prototype as unknown as {
+    _articleTitle: string;
+    _headerDuplicatesTitle(node: { tagName: string; textContent: string | null }): boolean;
+  };
+  proto._headerDuplicatesTitle = function (node) {
+    const heading = (node.textContent ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    const title = (this._articleTitle ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    return heading.length > 0 && title.includes(heading);
+  };
+}
+
 /**
  * Rewrite relative img src / a href against the article page URL. Extracted
  * content is rendered on a different origin, so a relative src would resolve

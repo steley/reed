@@ -31237,6 +31237,14 @@ setPrototypeOf(Document4, Document2).prototype = Document2.prototype;
 
 // src/lib/extract.ts
 var ACCEPT_HTML = "text/html,application/xhtml+xml,*/*;q=0.8";
+{
+  const proto = import_readability.Readability.prototype;
+  proto._headerDuplicatesTitle = function(node) {
+    const heading = (node.textContent ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    const title = (this._articleTitle ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    return heading.length > 0 && title.includes(heading);
+  };
+}
 function absolutizeUrls(html, baseUrl) {
   const { document: document2 } = parseHTML(`<!doctype html><html><body>${html}</body></html>`);
   for (const el of document2.querySelectorAll("img[src], a[href]")) {

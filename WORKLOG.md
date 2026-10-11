@@ -2124,3 +2124,20 @@ element. Dates are page chrome (the reader renders its own date line);
 scoping to article/main headers with `<time>` keeps site-wide nav headers
 untouched for Readability's own handling. Verified against the fetched
 page: date/tag gone, body intact.
+
+### Fix en route: section heading deleted as "title duplicate" (2026-10-11)
+Same foundermail article again: its final `<h2>Foundermail 的缺点</h2>`
+never made it into the extracted body (the section's paragraph did).
+Readability's debug log showed the cause: `_headerDuplicatesTitle` scores
+h1/h2 text against the page title with token-overlap similarity — the
+heading shares the single Latin token "foundermail" with the title
+"FounderMail - 免费的域名邮箱", the un-split CJK tail weighs almost
+nothing, similarity came out 0.81 (> 0.75) and the heading was deleted as
+a body-start title duplicate.
+
+Fix: prototype patch in `lib/extract.ts` — `_headerDuplicatesTitle` now
+requires normalized containment (heading is a substring of the title). A
+genuine body-start duplicate IS the title; a section heading sharing one
+word with it survives. Trade-off vs upstream: a heading that's a strict
+substring of the title (e.g. the product name alone) is still removed —
+accepted, far rarer than the CJK misfire.

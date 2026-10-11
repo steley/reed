@@ -92,6 +92,33 @@ describe("extractFullText", () => {
     expect(content).toContain("Body paragraph 0");
   });
 
+  it("keeps section headings that merely share a word with the page title", async () => {
+    // Regression: upstream token-overlap similarity deleted a CJK section
+    // heading because it shared "foundermail" with the page title.
+    const page = `<!doctype html><html><head><title>FounderMail - 免费的域名邮箱</title></head><body><article>
+      ${Array.from({ length: 6 }, (_, i) => `<p>Body paragraph ${i} with enough text for the readability scorer.</p>`).join("\n")}
+      <h2>Foundermail 的缺点</h2>
+      <p>结论段落，说明该服务的不足之处，长度足够被视为正文内容。</p>
+    </article></body></html>`;
+    vi.mocked(fetch).mockResolvedValue(new Response(page, { status: 200 }));
+
+    const content = await extractFullText("https://blog.example.com/post");
+    expect(content).toContain("Foundermail 的缺点");
+    expect(content).toContain("结论段落");
+  });
+
+  it("still drops a heading that duplicates the page title", async () => {
+    const page = `<!doctype html><html><head><title>My Post Title</title></head><body><article>
+      <h1>My Post Title</h1>
+      ${Array.from({ length: 6 }, (_, i) => `<p>Body paragraph ${i} with enough text for the readability scorer.</p>`).join("\n")}
+    </article></body></html>`;
+    vi.mocked(fetch).mockResolvedValue(new Response(page, { status: 200 }));
+
+    const content = await extractFullText("https://blog.example.com/post");
+    expect(content).not.toContain("<h1>My Post Title</h1>");
+    expect(content).toContain("Body paragraph 0");
+  });
+
   it("returns null on HTTP failure", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("nope", { status: 404 }));
     expect(await extractFullText("https://blog.example.com/post")).toBeNull();
