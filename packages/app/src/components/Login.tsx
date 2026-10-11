@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { authApi } from "../lib/api.ts";
-import { ReedMark } from "./icons.tsx";
+import { ReedMark, Eye, EyeOff } from "./icons.tsx";
 
 interface Props {
   onAuthed(): void;
@@ -15,6 +15,7 @@ export function Login({ onAuthed }: Props) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -57,15 +58,25 @@ export function Login({ onAuthed }: Props) {
             autoComplete="email"
             className="w-full rounded-lg border border-line bg-panel px-3.5 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
           />
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
-            className="w-full rounded-lg border border-line bg-panel px-3.5 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              className="w-full rounded-lg border border-line bg-panel px-3.5 py-2.5 pr-10 text-sm text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              className="absolute top-1/2 right-2.5 -translate-y-1/2 p-1 text-ink-3 transition-colors hover:text-ink"
+            >
+              {showPassword ? <EyeOff /> : <Eye />}
+            </button>
+          </div>
           {mode === "register" && (
             <input
               type="password"

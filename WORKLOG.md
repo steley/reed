@@ -2314,3 +2314,33 @@ only the feeds table changed.
   widened select for data the client already has — rejected).
 - Folders still sort by name only; the recency ordering is inside each
   section, so folder rows don't jump around.
+
+---
+
+## Password visibility toggle on the auth form
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was built
+- Password field on the login/register screen (Login.tsx) gained an eye
+  toggle to show/hide the password (plaintext ↔ dots).
+
+### Decisions made
+- **Eye toggle instead of double password confirmation** on registration:
+  visible typing catches typos better than blind re-entry, one fewer field
+  fits the minimal Reeder-style form, and the "confirmed the same typo
+  twice" failure mode disappears. Also shared with login mode for free
+  (single form component).
+- Icons (`Eye`/`EyeOff`) added to `components/icons.tsx` following the
+  existing inline-SVG pattern; button uses semantic tokens
+  (`text-ink-3` → hover `text-ink`), no new palette colors.
+- Toggle is not persisted; defaults to hidden every render. No test — pure
+  presentation state.
+
+### README refresh (same change)
+- Features list updated for multi-user auth, folders, OPML; removed the
+  stale "no auth in phase 1" line (curl still works via Bearer tokens).
+- REST API table replaced with the current endpoint set (auth, folders,
+  OPML, article GET by id) + session-requirement note.
+- Deployment section now mentions `AUTH_SECRET` alongside `DATABASE_URL`.
+- Roadmap: Phase 3 auth marked shipped (2026-10-11), CLI tool remaining.

@@ -12,6 +12,9 @@ A personal RSS reader built on Vercel (Hono), Neon (PostgreSQL), and GitHub Acti
 
 ## Features
 
+- Multi-user auth: email + password registration/login (JWT session cookie; optional invite code via `SIGNUP_CODE`)
+- Folders to organize feeds (drag-and-drop, rename/delete via context menu)
+- OPML import/export
 - Add RSS 2.0 and Atom feeds by URL
 - Hourly background refresh via GitHub Actions; manual refresh-all or per-feed
 - Full-text search across article titles and bodies (Postgres pg_trgm)
@@ -21,7 +24,7 @@ A personal RSS reader built on Vercel (Hono), Neon (PostgreSQL), and GitHub Acti
 - Article titles link to original posts
 - Dark/light mode toggle (defaults to light mode)
 - Resizable three-pane layout: feed sidebar, article list, article reader
-- REST API is fully `curl`-able — no auth in phase 1
+- REST API is fully `curl`-able — all data endpoints accept `Authorization: Bearer <jwt>` in addition to the session cookie
 
 ---
 
@@ -64,15 +67,26 @@ reed/
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/feeds` | List all feeds |
+| `POST` | `/api/auth/register` | Register `{ email, password }` (`code` when invite code set) → session cookie |
+| `POST` | `/api/auth/login` | Log in `{ email, password }` → session cookie |
+| `POST` | `/api/auth/logout` | Clear the session cookie |
+| `GET` | `/api/auth/me` | Session check → `{ id, email }` |
+| `GET` | `/api/feeds` | List your feeds |
 | `POST` | `/api/feeds` | Add a feed `{ url }` |
+| `PATCH` | `/api/feeds/:id` | Move feed into/out of a folder `{ folderId }` |
 | `DELETE` | `/api/feeds/:id` | Delete a feed and its articles |
 | `POST` | `/api/feeds/:id/refresh` | Manually refresh a feed |
-| `GET` | `/api/articles` | List articles (`?feed_id=`, `?unread=true`, `?q=` full-text search) |
+| `GET` / `POST` | `/api/folders` | List / create folders |
+| `PATCH` / `DELETE` | `/api/folders/:id` | Rename / delete a folder (member feeds become uncategorized) |
+| `GET` | `/api/articles` | List articles (`?feed_id=`, `?folder_id=`, `?unread=true`, `?q=` full-text search) |
+| `GET` | `/api/articles/:id` | Full article including content |
 | `PATCH` | `/api/articles/:id` | Mark read/unread `{ read: boolean }` |
 | `POST` | `/api/articles/read-all` | Mark all as read; `{ feedId }` scopes to one feed |
+| `GET` / `POST` | `/api/opml` | Export OPML download / import OPML body |
 
-All responses are JSON. Errors return `{ error: string }`.
+All data endpoints require a session (HttpOnly cookie or `Authorization: Bearer`);
+`GET /api/health` and the auth endpoints are public. All responses are JSON.
+Errors return `{ error: string }`.
 
 ---
 
@@ -101,8 +115,8 @@ pnpm type-check
 ## Deployment
 
 ```bash
-# First time: import the repo in Vercel, set the DATABASE_URL
-# project env var, bind a custom domain.
+# First time: import the repo in Vercel, set the DATABASE_URL and
+# AUTH_SECRET project env vars, bind a custom domain.
 
 # Deploy from the CLI (or just push — Vercel builds from the repo)
 pnpm deploy
@@ -150,4 +164,4 @@ Every commit runs:
 
 ## Roadmap
 
-- **Phase 3:** auth, CLI tool
+- **Phase 3:** ~~auth~~ (shipped 2026-10-11), CLI tool (in progress)
