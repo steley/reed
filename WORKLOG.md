@@ -2291,3 +2291,26 @@ silently no-ops. Symptom signature: `NeonDbError: column ... does not exist`
 from cron/API while `GET /api/feeds` 500s (select now includes the missing
 column) — sidebar feeds vanish but folders/articles keep working, because
 only the feeds table changed.
+
+---
+
+## Sidebar feed order — updated feeds float up
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was built
+- Feeds in the sidebar now sort by recency of unread articles: the feed whose
+  newest unread article is most recent goes first; feeds without unread fall
+  back to the previous name order below them.
+
+### Decisions made
+- **Derived client-side from `unreadList`, no schema/API change.** App already
+  fetches the full unread list every cycle for badges; a `feedRecency` memo
+  (`feedId -> max(publishedAt ?? createdAt)`) is passed to `FeedSidebar`,
+  whose `sortedFeeds` comparator sorts by recency desc, then
+  `compareNames()` as tiebreak/fallback.
+- Considered `feeds.lastFetchedAt` (refresh time, not article time — wrong
+  signal) and a server-side "latest article per feed" query (new endpoint or
+  widened select for data the client already has — rejected).
+- Folders still sort by name only; the recency ordering is inside each
+  section, so folder rows don't jump around.

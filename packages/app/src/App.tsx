@@ -155,6 +155,16 @@ export function App() {
   }, [unreadList]);
   const totalUnread = unreadList.length;
 
+  // Newest unread article time per feed — drives "updated feeds float up" in the sidebar
+  const feedRecency = useMemo(() => {
+    const recency: Record<string, number> = {};
+    for (const article of unreadList) {
+      const at = article.publishedAt ?? article.createdAt;
+      if (at > (recency[article.feedId] ?? 0)) recency[article.feedId] = at;
+    }
+    return recency;
+  }, [unreadList]);
+
   const selectedFeed = feeds.find((f) => f.id === selectedFeedId) ?? null;
 
   // List rows omit `content` — fetch the full article when one is opened.
@@ -399,6 +409,7 @@ export function App() {
         folders={folders}
         selectedFeedId={selectedFeedId}
         unreadCounts={unreadCounts}
+        feedRecency={feedRecency}
         totalUnread={totalUnread}
         isDark={isDark}
         open={sidebarOpen}

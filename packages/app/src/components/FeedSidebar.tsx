@@ -18,6 +18,7 @@ interface Props {
   folders: Folder[];
   selectedFeedId: string | null;
   unreadCounts: Record<string, number>;
+  feedRecency: Record<string, number>;
   totalUnread: number;
   isDark: boolean;
   open: boolean; // mobile drawer state; always visible on desktop
@@ -161,6 +162,7 @@ export function FeedSidebar({
   folders,
   selectedFeedId,
   unreadCounts,
+  feedRecency,
   totalUnread,
   isDark,
   open,
@@ -194,9 +196,16 @@ export function FeedSidebar({
     () => [...folders].sort((a, b) => compareNames(a.name, b.name)),
     [folders],
   );
+  // Feeds with unread updates float up (newest first), the rest stay name-ordered
   const sortedFeeds = useMemo(
-    () => [...feeds].sort((a, b) => compareNames(feedDisplayName(a), feedDisplayName(b))),
-    [feeds],
+    () =>
+      [...feeds].sort((a, b) => {
+        const ra = feedRecency[a.id] ?? 0;
+        const rb = feedRecency[b.id] ?? 0;
+        if (ra !== rb) return rb - ra;
+        return compareNames(feedDisplayName(a), feedDisplayName(b));
+      }),
+    [feeds, feedRecency],
   );
 
   useEffect(() => {
