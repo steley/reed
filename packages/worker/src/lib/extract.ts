@@ -61,17 +61,44 @@ function stripArticleHeaders(document: ReturnType<typeof parseHTML>["document"])
  * paragraphs by their container, so a long quoted statement inside a
  * blockquote (e.g. a bilingual post quoting a source) out-competes the real
  * article body as a candidate and gets promoted alone — the surrounding
- * prose is dropped. Merging quoted paragraphs into the article flow keeps
- * all the score on the actual content container. Styling loss of the quote
- * itself is accepted: completeness beats indent formatting.
+ * prose is dropped. Each direct child is tagged `data-reed-quote` first so
+ * `restoreQuotes()` can wrap the run back into a <blockquote> afterwards
+ * (class attributes are stripped by Readability; data attributes survive).
  */
 function unwrapBlockquotes(document: ReturnType<typeof parseHTML>["document"]): void {
   for (const bq of [...document.querySelectorAll("blockquote")]) {
     const parent = bq.parentNode;
     if (!parent) continue;
+    for (const child of [...bq.children]) {
+      child.setAttribute("data-reed-quote", "");
+    }
     while (bq.firstChild) parent.insertBefore(bq.firstChild, bq);
     bq.remove();
   }
+}
+
+/**
+ * Re-wrap consecutive `data-reed-quote`-tagged siblings (unwrapped by
+ * `unwrapBlockquotes`) into blockquotes, restoring the quote formatting.
+ */
+function restoreQuotes(html: string): string {
+  const { document } = parseHTML(`<!doctype html><html><body>${html}</body></html>`);
+  for (const first of [...document.querySelectorAll("[data-reed-quote]")]) {
+    // consumed nodes have their marker removed below — skip them
+    if (!first.hasAttribute("data-reed-quote")) continue;
+    const parent = first.parentNode;
+    if (!parent) continue;
+    const quote = document.createElement("blockquote");
+    parent.insertBefore(quote, first);
+    let node: typeof first | null = first;
+    while (node && node.hasAttribute("data-reed-quote")) {
+      const next: typeof first | null = node.nextElementSibling;
+      node.removeAttribute("data-reed-quote");
+      quote.appendChild(node);
+      node = next;
+    }
+  }
+  return document.body.innerHTML;
 }
 
 /**
@@ -89,7 +116,7 @@ export async function extractFullText(url: string): Promise<string | null> {
     const parsed = new Readability(document).parse();
     const content = parsed?.content?.trim();
     if (!content) return null;
-    return absolutizeUrls(content, url);
+    return absolutizeUrls(restoreQuotes(content), url);
   } catch {
     return null;
   }

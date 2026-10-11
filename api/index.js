@@ -31267,9 +31267,30 @@ function unwrapBlockquotes(document2) {
   for (const bq of [...document2.querySelectorAll("blockquote")]) {
     const parent = bq.parentNode;
     if (!parent) continue;
+    for (const child of [...bq.children]) {
+      child.setAttribute("data-reed-quote", "");
+    }
     while (bq.firstChild) parent.insertBefore(bq.firstChild, bq);
     bq.remove();
   }
+}
+function restoreQuotes(html) {
+  const { document: document2 } = parseHTML(`<!doctype html><html><body>${html}</body></html>`);
+  for (const first of [...document2.querySelectorAll("[data-reed-quote]")]) {
+    if (!first.hasAttribute("data-reed-quote")) continue;
+    const parent = first.parentNode;
+    if (!parent) continue;
+    const quote = document2.createElement("blockquote");
+    parent.insertBefore(quote, first);
+    let node = first;
+    while (node && node.hasAttribute("data-reed-quote")) {
+      const next = node.nextElementSibling;
+      node.removeAttribute("data-reed-quote");
+      quote.appendChild(node);
+      node = next;
+    }
+  }
+  return document2.body.innerHTML;
 }
 async function extractFullText(url) {
   try {
@@ -31280,7 +31301,7 @@ async function extractFullText(url) {
     const parsed = new import_readability.Readability(document2).parse();
     const content = parsed?.content?.trim();
     if (!content) return null;
-    return absolutizeUrls(content, url);
+    return absolutizeUrls(restoreQuotes(content), url);
   } catch {
     return null;
   }

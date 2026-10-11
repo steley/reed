@@ -2141,3 +2141,19 @@ genuine body-start duplicate IS the title; a section heading sharing one
 word with it survives. Trade-off vs upstream: a heading that's a strict
 substring of the title (e.g. the product name alone) is still removed —
 accepted, far rarer than the CJK misfire.
+
+### Fix en route: restore blockquote formatting after quote unwrapping (2026-10-11)
+The blockquote-unwrapping fix kept all content but flattened quote
+formatting — reported on the Autistici article, whose body is mostly one
+long quoted statement. `unwrapBlockquotes()` now tags each direct child
+with `data-reed-quote` before unwrapping (class attributes are stripped by
+Readability's cleanClasses; data attributes survive — verified), and a new
+`restoreQuotes()` post-pass re-wraps consecutive tagged siblings into a
+`<blockquote>`, so the quote renders with the existing `.article-body
+blockquote` styling.
+
+Gotcha hit en route: the first restore version re-grouped already-consumed
+nodes into nested blockquotes (the marker was removed only in a final
+cleanup pass; the loop snapshot still held them). Fix: consume the marker
+at grouping time. Verified end-to-end against the saved Autistici page:
+one flat blockquote containing the full statement, intro and tail intact.

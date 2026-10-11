@@ -72,6 +72,9 @@ describe("extractFullText", () => {
     expect(content).toContain("Quoted statement paragraph 0");
     expect(content).toContain("原因与过程");
     expect(content).toContain("结论性的观察");
+    // the quoted run is re-wrapped into a styled blockquote
+    expect(content).toContain("<blockquote>");
+    expect(content).not.toContain("data-reed-quote");
   });
 
   it("drops article header metadata (date, tags) from the body", async () => {
