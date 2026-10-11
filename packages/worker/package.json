@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "tsx scripts/dev.ts",
     "refresh": "tsx scripts/refresh.ts",
+    "backfill": "tsx scripts/backfill-fulltext.ts",
     "type-check": "tsc --noEmit",
     "test": "vitest --passWithNoTests",
     "test:run": "vitest run --passWithNoTests",

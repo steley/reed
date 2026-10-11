@@ -1988,3 +1988,22 @@ Gotchas:
   extract/refresh unit tests cover the new logic without a DB.
 - Readability mutates the document it parses — fine here, parseHTML output
   is one-shot.
+
+### Full-text backfill for pre-existing articles (2026-10-11)
+First real-world test (a blog post on blog.dejavu.moe) showed no full text —
+extraction itself works fine on that page (verified locally: 2.3 KB of body
+extracted cleanly). The cause was the design boundary: `refreshFeed()` only
+extracts for **new** articles, so every row stored before the feature
+deployed sits in the upsert "existing" branch forever. Working as decided,
+but it needed a one-time path for the back catalog.
+
+`scripts/backfill-fulltext.ts` (→ `pnpm --filter @reed/worker backfill`):
+selects rows where `content IS NULL OR length(content) < 500` (same
+threshold as the refresh criterion), extracts with pool of 4, updates
+`content` in place. Idempotent — filled rows are skipped on re-run, failed
+extractions can be retried. Runs locally against `DATABASE_URL`; not wired
+into Actions (one-shot, personal scale).
+
+Discarded: teaching refreshFeed to backfill lazily on upsert (violates the
+"never re-crawl on every hourly refresh" rule), and a one-off API endpoint
+(auth surface + serverless time budget for a job a local script does better).

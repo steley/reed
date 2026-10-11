@@ -1,0 +1,40 @@
+/**
+ * One-shot backfill: fetch full text for articles stored before the
+ * full-text feature shipped (refreshFeed only extracts for new articles,
+ * so pre-existing rows never get revisited). Reads DATABASE_URL from the
+ * environment. Safe to re-run — rows that already have full content are
+ * skipped, extraction failures are left untouched (re-run retries them).
+ */
+import { eq, sql } from "drizzle-orm";
+import { getDb } from "../src/db/client.ts";
+import { articles } from "../src/db/schema.ts";
+import { extractFullText } from "../src/lib/extract.ts";
+
+const POOL = 4;
+
+const db = getDb();
+const rows = await db
+  .select({ id: articles.id, url: articles.url })
+  .from(articles)
+  .where(sql`${articles.content} IS NULL OR length(${articles.content}) < 500`);
+console.log(`Backfilling full text for ${rows.length} article(s)...`);
+
+let filled = 0;
+let failed = 0;
+for (let i = 0; i < rows.length; i += POOL) {
+  const batch = rows.slice(i, i + POOL);
+  const results = await Promise.allSettled(batch.map((row) => extractFullText(row.url)));
+  for (const [j, row] of batch.entries()) {
+    const result = results[j];
+    if (result?.status === "fulfilled" && result.value) {
+      await db.update(articles).set({ content: result.value }).where(eq(articles.id, row.id));
+      filled++;
+    } else {
+      failed++;
+      console.error(`No full text for ${row.url}`);
+    }
+  }
+  console.log(`  ${Math.min(i + POOL, rows.length)}/${rows.length}`);
+}
+
+console.log(`Done: ${filled} filled, ${failed} without full text.`);

@@ -323,6 +323,11 @@ summary counts as a readable body and skips fetching), `extractFullText()`
 - Extraction failure is silent (`null`) — the summary fallback is the design,
   not an error path. Prefetch runs in a pool of 4 (`FULLTEXT_POOL`) so a
   50-item first sync doesn't serialize timeouts against one dead host.
+- Articles stored **before** the feature shipped never get full text (they
+  always take the upsert "existing" branch). Backfill them with
+  `pnpm --filter @reed/worker backfill` (→ `scripts/backfill-fulltext.ts`,
+  reads `DATABASE_URL`; idempotent — rows with content ≥ 500 chars are
+  skipped, failures can be retried by re-running).
 
 ### Feed fetch guardrails (SSRF)
 Feed URLs are untrusted input (anyone who can reach the unauthenticated API can
@@ -482,6 +487,9 @@ pnpm --filter @reed/worker db:migrate
 
 # Trigger the hourly refresh manually (same code the Actions workflow runs)
 pnpm --filter @reed/worker refresh
+
+# Backfill full text onto articles stored before the feature shipped
+DATABASE_URL=postgresql://... pnpm --filter @reed/worker backfill
 
 # Open Drizzle Studio (DB browser, uses DATABASE_URL)
 pnpm --filter @reed/worker db:studio
