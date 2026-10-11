@@ -2171,3 +2171,16 @@ only, no re-extraction needed.
 
 En route: width: 100% on .article-body table — short code blocks were
 half-pane; fill the content width, wide ones still scroll.
+
+### En route: code tables fill the pane width (2026-10-11)
+User feedback: short Chroma code blocks rendered at half the pane width —
+the earlier `display: block` fix made them scrollable but the anonymous
+inner table box still hugs content, so `width: 100%` on the block box
+doesn't stretch the cells (verified in-browser: block 680px, inner table
+256px). Verified fix in a live browser render: the `<figure>` becomes the
+scroll container (`overflow-x: auto`, margins zeroed) and figure-wrapped
+tables use native `display: table; width: 100%` — short blocks fill the
+content width, wide blocks scroll inside the figure. Bare (non-figure)
+tables keep the `display: block` scrolling rule. `display: table` +
+`overflow-x: auto` on the table itself was tested and rejected: the table
+grows past the pane without ever scrolling.

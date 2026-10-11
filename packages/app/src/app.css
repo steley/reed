@@ -114,9 +114,20 @@ body {
   padding: 0;
 }
 
+.article-body figure {
+  /* Chroma-style highlighters wrap code tables in <figure>; the figure is
+     the scroll container so the table can fill the width on short code */
+  margin: 1.5em 0;
+  overflow-x: auto;
+}
+.article-body figure > table {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+}
 .article-body table {
-  /* syntax highlighters (e.g. Chroma) wrap code in tables; without this the
-     table sizes to its widest code line and drags the whole pane wide */
+  /* bare (non-figure) tables: block-level so wide ones scroll inside the
+     pane instead of dragging it wide */
   display: block;
   width: 100%;
   max-width: 100%;
