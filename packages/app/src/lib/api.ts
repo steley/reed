@@ -9,6 +9,7 @@ import type {
   UpdateArticle,
   UpdateFeed,
   UpdateFolder,
+  User,
 } from "@reed/types";
 
 /**
@@ -18,6 +19,15 @@ import type {
  */
 const BASE = "/api";
 
+/**
+ * Invoked whenever any API call comes back 401 — App registers a callback that
+ * flips the UI back to the login screen (session expired or signed out).
+ */
+let onUnauthorized: (() => void) | null = null;
+export function setOnUnauthorized(fn: () => void): void {
+  onUnauthorized = fn;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -25,6 +35,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
+    if (res.status === 401) onUnauthorized?.();
     const body = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error((body as { error?: string }).error ?? res.statusText);
   }
@@ -34,6 +45,34 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   return res.json() as Promise<T>;
 }
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+export const authApi = {
+  me(): Promise<User> {
+    return request<User>("/auth/me");
+  },
+
+  login(email: string, password: string): Promise<User> {
+    return request<User>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+  },
+
+  register(email: string, password: string, code?: string): Promise<User> {
+    return request<User>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(code ? { email, password, code } : { email, password }),
+    });
+  },
+
+  logout(): Promise<void> {
+    return request<void>("/auth/logout", { method: "POST" });
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Feeds

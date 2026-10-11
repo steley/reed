@@ -15,6 +15,13 @@
       "when": 1791690624548,
       "tag": "0001_pg_trgm",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791997600000,
+      "tag": "0002_multiuser",
+      "breakpoints": true
     }
   ]
 }

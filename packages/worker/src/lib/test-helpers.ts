@@ -4,6 +4,10 @@ import { drizzle } from "drizzle-orm/neon-http";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
 import { SCHEMA_SQL } from "../db/ddl.ts";
 import * as schema from "../db/schema.ts";
+import { createSessionToken } from "./auth.ts";
+
+// requireAuth signs/verifies JWTs — tests share a fixed secret.
+process.env.AUTH_SECRET ??= "test-secret";
 
 const TEST_URL = process.env.TEST_DATABASE_URL?.trim();
 
@@ -49,6 +53,37 @@ export async function createTestDb(ctx: {
     })();
   }
   await schemaReady;
-  await db.execute(sql`TRUNCATE folders, feeds, articles CASCADE`);
+  await db.execute(sql`TRUNCATE users, folders, feeds, articles CASCADE`);
   return db;
+}
+
+/**
+ * Insert a user row directly (feeds.user_id has an FK to users). The password
+ * hash is deliberately malformed — login is exercised in auth.test.ts.
+ */
+export async function seedUser(db: NeonHttpDatabase<typeof schema>, id: string): Promise<string> {
+  await db.insert(schema.users).values({
+    id,
+    email: `${id}@test.local`,
+    passwordHash: "scrypt:00:00",
+    createdAt: 1,
+  });
+  return id;
+}
+
+/**
+ * Wrap app.request so every call carries a valid session for `userId`
+ * (Bearer header — the cookie path is exercised in auth.test.ts).
+ */
+export function authedRequest(
+  app: { request: (path: string, init?: RequestInit) => Response | Promise<Response> },
+  userId: string,
+): (path: string, init?: RequestInit) => Promise<Response> {
+  return async (path, init) => {
+    const token = await createSessionToken(userId);
+    return app.request(path, {
+      ...init,
+      headers: { Authorization: `Bearer ${token}`, ...init?.headers },
+    });
+  };
 }

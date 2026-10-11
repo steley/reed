@@ -25,6 +25,7 @@ interface Props {
   onAddFeed(): void;
   onAddFolder(): void;
   onImportOpml(): void;
+  onSignOut(): void;
   onRenameFolder(id: string): void;
   onDeleteFolder(id: string): void;
   onMoveFeed(feedId: string, folderId: string | null): void;
@@ -140,6 +141,7 @@ export function FeedSidebar({
   onAddFeed,
   onAddFolder,
   onImportOpml,
+  onSignOut,
   onRenameFolder,
   onDeleteFolder,
   onMoveFeed,
@@ -556,6 +558,18 @@ export function FeedSidebar({
             >
               Export OPML
             </a>
+            <div className="my-1 border-t border-line" />
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpmlMenu(null);
+                onSignOut();
+              }}
+              className="block w-full px-3 py-1.5 text-left text-[13px] text-ink-2 hover:bg-card hover:text-ink"
+            >
+              Sign out
+            </button>
           </div>
         </>
       )}

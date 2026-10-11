@@ -45,8 +45,10 @@ A self-hosted RSS reader with:
 - A React frontend (Vite + Tailwind v4, hand-rolled components) served as static output by Vercel
 - A CLI tool for terminal access to the API (phase 3)
 
-This is a **personal, single-user application**. There is no multi-tenancy, no
-per-user auth in phase 1.
+This is a **personal application, now multi-user** (2026-10-11): every feed,
+folder, and article is scoped to a `users` row and the API requires a session
+(JWT cookie or `Authorization: Bearer`) — except `GET /api/health` and the
+auth endpoints. Registration can be gated with an invite code via `SIGNUP_CODE`.
 
 ---
 
@@ -193,18 +195,33 @@ reintroduce patches without a diagnosed, upstream-unfixable reason.
 
 ## Data Model
 
+### `users`
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `text` PK | `crypto.randomUUID()` |
+| `email` | `text` UNIQUE NOT NULL | Login id, lowercased on write |
+| `password_hash` | `text` NOT NULL | `scrypt:<salt hex>:<hash hex>` (Node `crypto.scrypt`, 64-byte key) |
+| `created_at` | `integer` | Unix ms |
+
+A placeholder `legacy` user row (created by `drizzle/0002_multiuser.sql`, with a
+password hash that can never verify) owns all pre-multiuser rows; the **first**
+real registration claims them (see "Article ownership" below). Don't delete
+that row while legacy-owned data exists.
+
 ### `folders`
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | `text` PK | `crypto.randomUUID()` |
-| `name` | `text` UNIQUE NOT NULL | Display name; duplicates rejected with `409` |
+| `user_id` | `text` FK → `users.id` NOT NULL | Owner |
+| `name` | `text` NOT NULL | Display name; unique **per user** (`folders_user_id_name_unique`), duplicates rejected with `409` |
 | `created_at` | `integer` | Unix ms, set on insert |
 
 ### `feeds`
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | `text` PK | `crypto.randomUUID()` |
-| `url` | `text` UNIQUE NOT NULL | The RSS/Atom feed URL |
+| `user_id` | `text` FK → `users.id` NOT NULL | Owner |
+| `url` | `text` NOT NULL | The RSS/Atom feed URL; unique **per user** (`feeds_user_id_url_unique`) — two users may subscribe to the same feed |
 | `title` | `text` | From feed `<title>` |
 | `site_url` | `text` | From feed `<link>` |
 | `description` | `text` | From feed `<description>` / `<subtitle>` |
@@ -218,7 +235,7 @@ reintroduce patches without a diagnosed, upstream-unfixable reason.
 |--------|------|-------|
 | `id` | `text` PK | `crypto.randomUUID()` |
 | `feed_id` | `text` FK → `feeds.id` ON DELETE CASCADE | |
-| `url` | `text` UNIQUE NOT NULL | Upsert key |
+| `url` | `text` NOT NULL | Upsert key, unique **per feed** (`articles_feed_id_url_unique`) |
 | `title` | `text` | |
 | `summary` | `text` | `<description>` excerpt |
 | `content` | `text` | `<content:encoded>` full body |
@@ -231,6 +248,8 @@ reintroduce patches without a diagnosed, upstream-unfixable reason.
 - `idx_articles_read` on `articles(read)`
 - `idx_articles_published_at` on `articles(published_at DESC)`
 - `idx_articles_search` on `articles` USING gin (`title`, `summary`, `content` with `gin_trgm_ops`) — backs ILIKE search
+- `idx_feeds_user_id` on `feeds(user_id)` — every list query scopes through it
+- `users_email_unique`, `folders_user_id_name_unique`, `feeds_user_id_url_unique`, `articles_feed_id_url_unique`
 
 Column types: timestamp columns are `bigint` (unix ms exceeds int4's range);
 `read` stays `integer` 0/1 so `@reed/types` and the frontend don't change.
@@ -241,11 +260,19 @@ swap, only the column type is wider.
 
 ## REST API
 
-Base path: `/api`
+Base path: `/api`. **Everything below requires a session** (HttpOnly `reed_session`
+cookie set by login/register, or `Authorization: Bearer <jwt>` for non-browser
+clients) except `GET /api/health` and the auth endpoints themselves. A 401
+response flips the SPA back to the login screen. Sessions are HS256 JWTs
+signed with `AUTH_SECRET`, 30-day expiry — stateless, no session table.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/feeds` | List all feeds |
+| `POST` | `/api/auth/register` | `{ email, password }` (`code` required when `SIGNUP_CODE` is set) → `201` + session cookie; duplicate email → `409`; password < 8 chars → `400`. **The first registration claims all `legacy`-owned folders/feeds** |
+| `POST` | `/api/auth/login` | `{ email, password }` → `200` + session cookie; bad credentials → `401` |
+| `POST` | `/api/auth/logout` | Clears the session cookie |
+| `GET` | `/api/auth/me` | Session check → `200 { id, email }`; 401 when signed out |
+| `GET` | `/api/feeds` | List the user's feeds |
 | `POST` | `/api/feeds` | Add feed `{ url: string }` → `201`; non-`http(s)` URL → `400` |
 | `PATCH` | `/api/feeds/:id` | Move feed into/out of a folder `{ folderId: string \| null }` → `200` |
 | `DELETE` | `/api/feeds/:id` | Delete feed + cascade articles → `204` |
@@ -291,10 +318,34 @@ bodies are capped at 4 MB. Consequence: feeds on localhost/private-network
 URLs are refused — use a public URL (or a tunnel) when testing locally.
 
 ### Article ownership on refresh
-`articles.url` is globally UNIQUE — one article row, one owning feed. If two
-feeds carry the same article URL, the feed that stored it first keeps
-ownership; later refreshes of other feeds **skip** that URL (no overwrite, no
-count as added/updated). Never widen the upsert's where-clause back to URL-only.
+`articles` is unique per **(feed_id, url)** — each feed owns its own article
+rows, so two users subscribed to the same feed URL each get their own copies
+(read state stays independent). `refreshFeed()` upserts scoped to the feed
+it's refreshing; never narrow the constraint back to URL-only (that was the
+single-user-era global dedupe and collides across users).
+
+### Multi-user auth (2026-10-11)
+Zero new dependencies: passwords are hashed with Node's built-in
+`crypto.scryptSync` (`lib/auth.ts`, format `scrypt:<salt>:<hash>`, constant-time
+compare); sessions are HS256 JWTs from `hono/jwt` in an `HttpOnly; Secure;
+SameSite=Lax` cookie (30 days, stateless — no session table).
+`requireAuth` (lib/auth.ts) also accepts `Authorization: Bearer` for the future
+CLI; it's mounted with `router.use("*", requireAuth)` at the top of each of the
+four data routers (feeds/folders/articles/opml) — health and auth routes stay
+public by never mounting it. Every data query must filter by `c.get("userId")`
+— single-row endpoints (`/api/feeds/:id` etc.) check ownership in the same
+WHERE clause or they're an IDOR hole. Uniqueness moved from global to per-user
+for feeds (`user_id, url`) and folders (`user_id, name`); email stays global.
+No rate limiting on login — acceptable at personal scale; revisit if the API
+ever becomes public-facing with open registration.
+
+Legacy data migration: `drizzle/0002_multiuser.sql` (hand-written under the
+documented exception — the backfill can't be generated) adds `users`, puts
+`user_id` on folders/feeds with `DEFAULT 'legacy'` (so the old deployed code
+and the hourly cron keep writing during the deploy window), and the first real
+registration claims those rows. A future `drizzle-kit generate` may emit a
+harmless `DROP DEFAULT` for those columns — that's fine, all inserts set
+`user_id` explicitly.
 
 Required repository secret: `DATABASE_URL`.
 
@@ -311,6 +362,8 @@ fast path; CI is the backstop for commits that bypass it.
 |----------|---------|--------|
 | `DATABASE_URL` | API (`src/db/client.ts`), all scripts, drizzle-kit, Actions | `postgresql://...` Neon connection string (production branch; the password is embedded) |
 | `TEST_DATABASE_URL` | Vitest (`test-helpers.ts`) | Throwaway Neon **branch** — tests TRUNCATE all tables, so never point it at a database you use. Unset → DB tests skip cleanly |
+| `AUTH_SECRET` | `lib/auth.ts` — session JWT signing/verification | Random string (`openssl rand -hex 32`). Set in Vercel env + local shell; missing → login/verify throws (500) |
+| `SIGNUP_CODE` | `POST /api/auth/register` | Optional invite code; when set, registration requires a matching `code` field. Unset = open registration |
 
 In Vercel these are project environment variables; in GitHub Actions they are
 repository secrets; locally they can be exported in the shell or set per-command.
@@ -326,6 +379,7 @@ repository secrets; locally they can be exported in the shell or set per-command
 - **Article typography:** rendered content uses the `.article-body` class (defined in `app.css`) — serif stack, hand-styled elements. Do not use Tailwind `prose` classes.
 - **Summary cleaning:** list-card summaries go through `cleanSummary()` in `lib/display.ts` (strips HTML + HN-style metadata blocks). Feed display names fall back to URL hostname via `feedDisplayName()` — never render a raw URL in the sidebar.
 - **Layout:** three panes — sidebar (w-64, mobile drawer with scrim), list (`md:w-[380px]`), reader (flex-1). On mobile the list and reader swap by `selectedArticle` state; no routing library.
+- **Auth gate:** App checks `GET /api/auth/me` on mount (`authed: boolean | null` — null renders nothing); unauthenticated renders `Login.tsx` full-screen. `setOnUnauthorized` (lib/api.ts) is registered once; **any** 401 from any API call flips back to the login screen (covers 30-day session expiry mid-use). Data-loading effects are gated on `authed`. Sign out lives in the sidebar `···` menu (`onSignOut` → POST /api/auth/logout → login screen). Same-origin cookies make the SPA itself auth-free — never add token handling to `request()`.
 - **Folders:** sidebar groups feeds into folders (`Folders` section + uncategorized `Feeds` section). Order is auto-ascending by display name via `compareNames()` (`localeCompare`, handles mixed Chinese/English) — no manual ordering, no order columns. Folder rows expand/collapse on click (chevron): default collapsed, auto-expanded while the folder has unread articles or contains the selected feed; manual choices live in a `expandOverride` map in `FeedSidebar` local state (session-only). Collapsing a folder that holds the selected feed deselects it first (`onSelectFeed(null)`) so the active row never hides itself. Feeds move via native HTML5 drag-and-drop (`draggable` rows; folder rows and the uncategorized section are drop targets → `PATCH /api/feeds/:id`) — dropping onto a collapsed folder works. Folders rename/delete via a hand-rolled right-click context menu (`FeedSidebar.tsx`); feeds get their own context menu (right-click or 500ms long-press on touch) with a "Move to" folder list + uncategorized + delete — that is the touch path for folder assignment, since HTML5 DnD does not work on touch. `NameDialog.tsx` is the shared single-name prompt for create/rename. The context menus must render outside the `<aside>` element — the aside's translate transform makes it the containing block for `position: fixed` descendants. The server's `GET /api/articles?folder_id=` filter has no UI consumer since folder article views were removed — kept as API surface (CLI).
 - **OPML import/export:** `···` button in the sidebar wordmark row opens a menu (Import OPML… / Export OPML), rendered outside the `<aside>` like the folder context menu. Export is a plain `<a href="/api/opml">` — the API's `Content-Disposition` triggers the download, no fetch wrapper. Import goes through `ImportOpmlDialog.tsx` (`file.text()` → POST `/api/opml`) and App reloads feeds+folders afterwards; the dialog shows result counts and a Done button. Import semantics are server-side (see API table): additive only, URL-dedupe for feeds, name-dedupe for folders. Parsing/generation lives in `worker/src/lib/opml.ts` on the existing `fast-xml-parser` dep — no OPML library.
 - **Article content rendering:** `marked` converts markdown → HTML, then `sanitizeArticleHtml()` (`lib/sanitize.ts`, DOMPurify) sanitizes it before the single `dangerouslySetInnerHTML` sink in `ArticleReader` — feed content is untrusted third-party input (audit AUDIT-001). Never add a second innerHTML sink without going through that helper. The sanitizer's regression tests live in `lib/sanitize.test.ts` (vitest + **jsdom** — happy-dom's DOM misparses template content and breaks DOMPurify).
@@ -429,6 +483,6 @@ pnpm --filter @reed/worker db:studio
 |-------|--------|-------------|
 | 1 | Complete | API layer — Hono, Neon Postgres, REST endpoints, GH Actions refresh, Vitest |
 | 2 | Complete | Frontend — React, Vite, Tailwind v4 (Reeder-style rewrite 2026-10-10), static hosting on Vercel |
-| 3 | Deferred | Auth, CLI tool (FTS5 search + OPML import/export shipped 2026-10-11) |
+| 3 | In progress | Auth (multi-user, shipped 2026-10-11), CLI tool (FTS5 search + OPML import/export shipped 2026-10-11) |
 
 See `WORKLOG.md` for increment-by-increment progress and decisions.

@@ -2,14 +2,17 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import type { DB } from "../db/client.ts";
 import { getDb } from "../db/client.ts";
+import { authRouter } from "./routes/auth.ts";
 import { feedsRouter } from "./routes/feeds.ts";
 import { articlesRouter } from "./routes/articles.ts";
 import { foldersRouter } from "./routes/folders.ts";
 import { opmlRouter } from "./routes/opml.ts";
 
-// Hono context variable: db is injected by middleware so routes are testable
+// Hono context variable: db is injected by middleware so routes are testable;
+// userId is set by requireAuth (lib/auth.ts) on every scoped route.
 export type Variables = {
   db: DB;
+  userId: string;
 };
 
 export function createApp(dbOverride?: DB) {
@@ -52,6 +55,7 @@ export function createApp(dbOverride?: DB) {
     return c.json({ error: "Internal server error" }, 500);
   });
 
+  app.route("/api/auth", authRouter);
   app.route("/api/feeds", feedsRouter);
   app.route("/api/folders", foldersRouter);
   app.route("/api/articles", articlesRouter);

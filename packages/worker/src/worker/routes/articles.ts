@@ -1,9 +1,12 @@
 import { Hono } from "hono";
-import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, type SQL } from "drizzle-orm";
 import { articles, feeds } from "../../db/schema.ts";
+import { requireAuth } from "../../lib/auth.ts";
 import type { Variables } from "../index.ts";
 
 export const articlesRouter = new Hono<{ Variables: Variables }>();
+
+articlesRouter.use("*", requireAuth);
 
 // GET /api/articles?feed_id=&folder_id=&unread=true&q=
 articlesRouter.get("/", async (c) => {
@@ -13,7 +16,16 @@ articlesRouter.get("/", async (c) => {
   const unread = c.req.query("unread");
   const q = c.req.query("q")?.trim();
 
-  const conditions = [];
+  const conditions: (SQL | undefined)[] = [
+    // Every view is scoped to the session user's feeds
+    inArray(
+      articles.feedId,
+      db
+        .select({ id: feeds.id })
+        .from(feeds)
+        .where(eq(feeds.userId, c.get("userId"))),
+    ),
+  ];
   if (q) {
     // ILIKE substring search directly on articles, backed by the pg_trgm GIN
     // index (works for any token length — Chinese words are often 2 chars).
@@ -58,7 +70,7 @@ articlesRouter.get("/", async (c) => {
       createdAt: articles.createdAt,
     })
     .from(articles)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(desc(articles.publishedAt));
 
   return c.json(rows);
@@ -68,14 +80,16 @@ articlesRouter.get("/", async (c) => {
 articlesRouter.get("/:id", async (c) => {
   const db = c.get("db");
   const rows = await db
-    .select()
+    .select({ article: articles })
     .from(articles)
-    .where(eq(articles.id, c.req.param("id")))
+    .innerJoin(feeds, eq(articles.feedId, feeds.id))
+    .where(and(eq(articles.id, c.req.param("id")), eq(feeds.userId, c.get("userId"))))
     .limit(1);
-  if (rows.length === 0) {
+  const row = rows[0];
+  if (!row) {
     return c.json({ error: "Article not found" }, 404);
   }
-  return c.json(rows[0]);
+  return c.json(row.article);
 });
 
 // POST /api/articles/read-all — mark every unread article read,
@@ -95,10 +109,21 @@ articlesRouter.post("/read-all", async (c) => {
     return c.json({ error: "feedId must be a string" }, 400);
   }
 
+  const ownFeeds = inArray(
+    articles.feedId,
+    db
+      .select({ id: feeds.id })
+      .from(feeds)
+      .where(eq(feeds.userId, c.get("userId"))),
+  );
   const result = await db
     .update(articles)
     .set({ read: 1 })
-    .where(feedId ? and(eq(articles.read, 0), eq(articles.feedId, feedId)) : eq(articles.read, 0));
+    .where(
+      feedId
+        ? and(eq(articles.read, 0), eq(articles.feedId, feedId), ownFeeds)
+        : and(eq(articles.read, 0), ownFeeds),
+    );
 
   return c.json({ marked: result.rowCount ?? 0 });
 });
@@ -123,7 +148,8 @@ articlesRouter.patch("/:id", async (c) => {
   const existing = await db
     .select({ id: articles.id })
     .from(articles)
-    .where(eq(articles.id, id))
+    .innerJoin(feeds, eq(articles.feedId, feeds.id))
+    .where(and(eq(articles.id, id), eq(feeds.userId, c.get("userId"))))
     .limit(1);
 
   if (existing.length === 0) {

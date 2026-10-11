@@ -1,15 +1,22 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { articles, feeds, folders } from "../../db/schema.ts";
 import { assertFetchableUrl, refreshFeed } from "../../lib/refresh.ts";
+import { requireAuth } from "../../lib/auth.ts";
 import type { Variables } from "../index.ts";
 
 export const feedsRouter = new Hono<{ Variables: Variables }>();
 
+feedsRouter.use("*", requireAuth);
+
 // GET /api/feeds
 feedsRouter.get("/", async (c) => {
   const db = c.get("db");
-  const rows = await db.select().from(feeds).orderBy(feeds.createdAt);
+  const rows = await db
+    .select()
+    .from(feeds)
+    .where(eq(feeds.userId, c.get("userId")))
+    .orderBy(feeds.createdAt);
   return c.json(rows);
 });
 
@@ -33,11 +40,12 @@ feedsRouter.post("/", async (c) => {
   }
 
   const db = c.get("db");
+  const userId = c.get("userId");
 
   const existing = await db
     .select({ id: feeds.id })
     .from(feeds)
-    .where(eq(feeds.url, feedUrl.trim()))
+    .where(and(eq(feeds.userId, userId), eq(feeds.url, feedUrl.trim())))
     .limit(1);
 
   if (existing.length > 0) {
@@ -48,12 +56,13 @@ feedsRouter.post("/", async (c) => {
   try {
     await db.insert(feeds).values({
       id,
+      userId,
       url: feedUrl.trim(),
       createdAt: Date.now(),
     });
   } catch (err) {
     // Concurrent duplicate insert (check-then-insert race) → 409, not 500
-    if (err instanceof Error && /UNIQUE/i.test(err.message)) {
+    if (err instanceof Error && /UNIQUE|duplicate key/i.test(err.message)) {
       return c.json({ error: "Feed URL already exists" }, 409);
     }
     throw err;
@@ -68,7 +77,11 @@ feedsRouter.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const db = c.get("db");
 
-  const existing = await db.select({ id: feeds.id }).from(feeds).where(eq(feeds.id, id)).limit(1);
+  const existing = await db
+    .select({ id: feeds.id })
+    .from(feeds)
+    .where(and(eq(feeds.id, id), eq(feeds.userId, c.get("userId"))))
+    .limit(1);
 
   if (existing.length === 0) {
     return c.json({ error: "Feed not found" }, 404);
@@ -97,8 +110,13 @@ feedsRouter.patch("/:id", async (c) => {
   }
 
   const db = c.get("db");
+  const userId = c.get("userId");
 
-  const existing = await db.select({ id: feeds.id }).from(feeds).where(eq(feeds.id, id)).limit(1);
+  const existing = await db
+    .select({ id: feeds.id })
+    .from(feeds)
+    .where(and(eq(feeds.id, id), eq(feeds.userId, userId)))
+    .limit(1);
   if (existing.length === 0) {
     return c.json({ error: "Feed not found" }, 404);
   }
@@ -107,7 +125,7 @@ feedsRouter.patch("/:id", async (c) => {
     const folder = await db
       .select({ id: folders.id })
       .from(folders)
-      .where(eq(folders.id, folderId))
+      .where(and(eq(folders.id, folderId), eq(folders.userId, userId)))
       .limit(1);
     if (folder.length === 0) {
       return c.json({ error: "Folder not found" }, 404);
@@ -125,7 +143,11 @@ feedsRouter.post("/:id/refresh", async (c) => {
   const id = c.req.param("id");
   const db = c.get("db");
 
-  const existing = await db.select({ id: feeds.id }).from(feeds).where(eq(feeds.id, id)).limit(1);
+  const existing = await db
+    .select({ id: feeds.id })
+    .from(feeds)
+    .where(and(eq(feeds.id, id), eq(feeds.userId, c.get("userId"))))
+    .limit(1);
 
   if (existing.length === 0) {
     return c.json({ error: "Feed not found" }, 404);

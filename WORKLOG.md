@@ -1802,3 +1802,95 @@ was: drop the bookkeeping `drizzle` schema, regenerate the baseline, migrate.
 Verified end-to-end against real Neon: tables + extension + 4 article indexes
 present, health/folder CRUD/ILIKE search/read-all all correct via the local
 dev server.
+
+## 2026-10-11 — Multi-user accounts (auth + per-user scoping)
+
+### What was built
+Full multi-user support, zero new dependencies:
+- `drizzle/0002_multiuser.sql` (hand-written under the documented exception —
+  includes a data backfill drizzle-kit cannot generate): `users` table,
+  `user_id` on folders/feeds, uniqueness moved from global columns to
+  per-user/per-feed composites (`folders(user_id,name)`, `feeds(user_id,url)`,
+  `articles(feed_id,url)`), `idx_feeds_user_id`. schema.ts matches the final
+  state (no `.default("legacy")` declared — a future `db:generate` may emit a
+  harmless `DROP DEFAULT`).
+- `lib/auth.ts`: scrypt password hashing (`node:crypto`, no bcrypt), HS256
+  session JWTs via `hono/jwt` in an `HttpOnly; Secure; SameSite=Lax` cookie
+  (30-day expiry, stateless — no session table), `requireAuth` middleware
+  accepting cookie or `Authorization: Bearer` (CLI path).
+- `routes/auth.ts`: register / login / logout / me. Registration optional
+  invite gate via `SIGNUP_CODE`; emails lowercased; password min 8.
+- All four data routers mount `router.use("*", requireAuth)`; every query
+  filters by `c.get("userId")`, single-row endpoints check ownership in the
+  WHERE clause (IDOR covered by tests).
+- `refreshFeed()` upsert is now scoped to (feed_id, url) — the old global-URL
+  "cross-feed skip" logic is gone; two users subscribed to the same feed URL
+  each get independent article rows. `runCron()` unchanged (feeds are just
+  rows; refresh doesn't care who owns them).
+- Frontend: `Login.tsx` full-screen gate (login/register toggle, invite-code
+  field in register mode), `authApi` + `setOnUnauthorized` in lib/api.ts (any
+  401 flips back to the login screen — covers mid-session expiry), App gates
+  data loads on `authed`, Sign out in the sidebar `···` menu. `@reed/types`
+  gained `User`.
+- Tests: `auth.test.ts` (hashing, register validation, invite code, legacy
+  claim, login/logout/me, 401 gate); multi-user scoping tests in feeds/
+  articles suites; existing suites reworked — `seedUser` + `authedRequest`
+  helpers in test-helpers (TRUNCATE now includes `users`; fixtures carry
+  `userId: "u1"`; requests go through `call()` with a Bearer token).
+- API bundle regenerated (600 KB, hono/jwt + scrypt included).
+
+### Decisions made
+- **hono/jwt + node:crypto over new deps** (bcrypt/session table/passport):
+  scrypt is in the stdlib, HS256 stateless cookies need no session store, and
+  Hono already ships both utilities. A sessions table buys revocation we
+  don't need at personal scale.
+- **First registration claims legacy rows** instead of a backfill script:
+  the migration can't know a password, so pre-multiuser feeds/folders belong
+  to a `legacy` placeholder (unloggable hash) and the first `register` reassigns
+  them. Deploy + register = data preserved, zero user steps beyond signing up.
+  Registration should be invite-gated (`SIGNUP_CODE`) so a stranger can't
+  register first and inherit the data.
+- **Per-feed article uniqueness over a global article pool + subscriptions
+  join table**: duplicated rows for shared feeds are trivially cheap on Neon
+  and keep `refreshFeed()`/queries exactly as they were shape-wise. The pool
+  design is the "hundreds of users" upgrade path, deliberately not built.
+- **`DEFAULT 'legacy'` on user_id during migration**: the currently-deployed
+  code (and the hourly Actions cron, which may fire mid-deploy) inserts
+  without `user_id`; the default keeps those writes alive instead of failing
+  them, and they get claimed by the first registration like everything else.
+- **401-anywhere → login screen**: one `setOnUnauthorized` hook in
+  `request()` instead of per-caller handling. Login's own 401 also triggers
+  it — harmless, we're already on that screen.
+- **No rate limiting on login/register**: personal scale; revisit if
+  registration is ever left open on a public domain.
+
+### Options considered and discarded
+- Session table + opaque tokens (rejection via DELETE): revocation isn't a
+  requirement; 30-day JWT expiry is acceptable for a personal reader.
+- Global users-scoped article dedupe (`ON CONFLICT (feed_id,url) DO UPDATE`):
+  drizzle upsert would work, but select-then-write stays consistent with the
+  existing no-transaction style (AUDIT-006).
+- Claiming legacy data inside a one-off `scripts/claim.ts`: more moving parts
+  than folding the claim into first registration.
+
+### Gotchas
+- `hono/jwt`'s `verify()` requires the algorithm argument (`"HS256"`) — the
+  2-arg call is a type error.
+- Hono `app.request()` returns `Response | Promise<Response>` — the
+  `authedRequest` test helper types its app param accordingly.
+- DB tests could not run locally (no `TEST_DATABASE_URL` in this shell), so
+  the migration SQL and the scoped queries are covered by review + types only
+  until the user runs the suite against a throwaway branch. Type-check, lint,
+  and both builds pass.
+- Secure cookies on `http://localhost` are fine (Chrome/Firefox treat
+  localhost as trustworthy) — Vite's `/api` proxy path works unmodified.
+
+### Follow-ups (user actions)
+1. `pnpm --filter @reed/worker db:migrate` (needs `DATABASE_URL`).
+2. Set `AUTH_SECRET` (`openssl rand -hex 32`) in Vercel env vars and locally;
+   set `SIGNUP_CODE` too unless open registration is intended.
+3. Deploy, register the first account — existing feeds/folders are claimed
+   automatically. Re-import OPML only if the legacy data was never migrated
+   (fresh-start choice from the Neon migration).
+4. Point `TEST_DATABASE_URL` at a throwaway branch and run `pnpm test:run`
+   once to exercise the new suites against real Postgres.

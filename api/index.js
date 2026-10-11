@@ -897,11 +897,11 @@ var require_strnum = __commonJS({
       } else {
         const match2 = numRegex.exec(trimmedStr);
         if (match2) {
-          const sign = match2[1];
+          const sign3 = match2[1];
           const leadingZeros = match2[2];
           let numTrimmedByZeros = trimZeros(match2[3]);
-          if (!options.leadingZeros && leadingZeros.length > 0 && sign && trimmedStr[2] !== ".") return str2;
-          else if (!options.leadingZeros && leadingZeros.length > 0 && !sign && trimmedStr[1] !== ".") return str2;
+          if (!options.leadingZeros && leadingZeros.length > 0 && sign3 && trimmedStr[2] !== ".") return str2;
+          else if (!options.leadingZeros && leadingZeros.length > 0 && !sign3 && trimmedStr[1] !== ".") return str2;
           else if (options.leadingZeros && leadingZeros === str2) return 0;
           else {
             const num = Number(trimmedStr);
@@ -912,13 +912,13 @@ var require_strnum = __commonJS({
             } else if (trimmedStr.indexOf(".") !== -1) {
               if (numStr === "0" && numTrimmedByZeros === "") return num;
               else if (numStr === numTrimmedByZeros) return num;
-              else if (sign && numStr === "-" + numTrimmedByZeros) return num;
+              else if (sign3 && numStr === "-" + numTrimmedByZeros) return num;
               else return str2;
             }
             if (leadingZeros) {
-              return numTrimmedByZeros === numStr || sign + numTrimmedByZeros === numStr ? num : str2;
+              return numTrimmedByZeros === numStr || sign3 + numTrimmedByZeros === numStr ? num : str2;
             } else {
-              return trimmedStr === numStr || trimmedStr === sign + numStr ? num : str2;
+              return trimmedStr === numStr || trimmedStr === sign3 + numStr ? num : str2;
             }
           }
         } else {
@@ -15888,6 +15888,9 @@ var Index = class {
 function index(name) {
   return new IndexBuilderOn(false, name);
 }
+function uniqueIndex(name) {
+  return new IndexBuilderOn(true, name);
+}
 
 // ../../node_modules/.pnpm/drizzle-orm@0.41.0_@cloudflare+workers-types@4.20260317.1_@libsql+client@0.17.2_@neondatabase+serverless@1.2.0_gel@2.2.0/node_modules/drizzle-orm/pg-core/session.js
 var PgPreparedQuery = class {
@@ -16242,30 +16245,55 @@ var schema_exports = {};
 __export(schema_exports, {
   articles: () => articles,
   feeds: () => feeds,
-  folders: () => folders
+  folders: () => folders,
+  users: () => users
 });
-var folders = pgTable("folders", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull().unique(),
-  createdAt: bigint("created_at", { mode: "number" }).notNull()
-});
-var feeds = pgTable("feeds", {
-  id: text("id").primaryKey(),
-  url: text("url").notNull().unique(),
-  title: text("title"),
-  siteUrl: text("site_url"),
-  description: text("description"),
-  imageUrl: text("image_url"),
-  folderId: text("folder_id").references(() => folders.id, { onDelete: "set null" }),
-  lastFetchedAt: bigint("last_fetched_at", { mode: "number" }),
-  createdAt: bigint("created_at", { mode: "number" }).notNull()
-});
+var users = pgTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull()
+    // Scoping uniques are per-user: two users may share a folder name or a feed URL.
+  },
+  (table) => [uniqueIndex("users_email_unique").on(table.email)]
+);
+var folders = pgTable(
+  "folders",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id),
+    name: text("name").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull()
+  },
+  (table) => [uniqueIndex("folders_user_id_name_unique").on(table.userId, table.name)]
+);
+var feeds = pgTable(
+  "feeds",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id),
+    url: text("url").notNull(),
+    title: text("title"),
+    siteUrl: text("site_url"),
+    description: text("description"),
+    imageUrl: text("image_url"),
+    folderId: text("folder_id").references(() => folders.id, { onDelete: "set null" }),
+    lastFetchedAt: bigint("last_fetched_at", { mode: "number" }),
+    createdAt: bigint("created_at", { mode: "number" }).notNull()
+  },
+  (table) => [
+    uniqueIndex("feeds_user_id_url_unique").on(table.userId, table.url),
+    index("idx_feeds_user_id").on(table.userId)
+  ]
+);
 var articles = pgTable(
   "articles",
   {
     id: text("id").primaryKey(),
     feedId: text("feed_id").notNull().references(() => feeds.id, { onDelete: "cascade" }),
-    url: text("url").notNull().unique(),
+    url: text("url").notNull(),
     title: text("title"),
     summary: text("summary"),
     content: text("content"),
@@ -16274,6 +16302,7 @@ var articles = pgTable(
     createdAt: bigint("created_at", { mode: "number" }).notNull()
   },
   (table) => [
+    uniqueIndex("articles_feed_id_url_unique").on(table.feedId, table.url),
     index("idx_articles_feed_id").on(table.feedId),
     index("idx_articles_read").on(table.read),
     index("idx_articles_published_at").on(table.publishedAt)
@@ -16292,6 +16321,756 @@ function getDb() {
   }
   return db;
 }
+
+// src/lib/auth.ts
+var import_node_crypto = require("node:crypto");
+
+// ../../node_modules/.pnpm/hono@4.12.9/node_modules/hono/dist/utils/cookie.js
+var validCookieNameRegEx = /^[\w!#$%&'*.^`|~+-]+$/;
+var validCookieValueRegEx = /^[ !#-:<-[\]-~]*$/;
+var parse = (cookie, name) => {
+  if (name && cookie.indexOf(name) === -1) {
+    return {};
+  }
+  const pairs = cookie.trim().split(";");
+  const parsedCookie = {};
+  for (let pairStr of pairs) {
+    pairStr = pairStr.trim();
+    const valueStartPos = pairStr.indexOf("=");
+    if (valueStartPos === -1) {
+      continue;
+    }
+    const cookieName = pairStr.substring(0, valueStartPos).trim();
+    if (name && name !== cookieName || !validCookieNameRegEx.test(cookieName)) {
+      continue;
+    }
+    let cookieValue = pairStr.substring(valueStartPos + 1).trim();
+    if (cookieValue.startsWith('"') && cookieValue.endsWith('"')) {
+      cookieValue = cookieValue.slice(1, -1);
+    }
+    if (validCookieValueRegEx.test(cookieValue)) {
+      parsedCookie[cookieName] = cookieValue.indexOf("%") !== -1 ? tryDecode(cookieValue, decodeURIComponent_) : cookieValue;
+      if (name) {
+        break;
+      }
+    }
+  }
+  return parsedCookie;
+};
+
+// ../../node_modules/.pnpm/hono@4.12.9/node_modules/hono/dist/helper/cookie/index.js
+var getCookie = (c, key, prefix) => {
+  const cookie = c.req.raw.headers.get("Cookie");
+  if (typeof key === "string") {
+    if (!cookie) {
+      return void 0;
+    }
+    let finalKey = key;
+    if (prefix === "secure") {
+      finalKey = "__Secure-" + key;
+    } else if (prefix === "host") {
+      finalKey = "__Host-" + key;
+    }
+    const obj2 = parse(cookie, finalKey);
+    return obj2[finalKey];
+  }
+  if (!cookie) {
+    return {};
+  }
+  const obj = parse(cookie);
+  return obj;
+};
+
+// ../../node_modules/.pnpm/hono@4.12.9/node_modules/hono/dist/helper/factory/index.js
+var createMiddleware = (middleware) => middleware;
+
+// ../../node_modules/.pnpm/hono@4.12.9/node_modules/hono/dist/utils/encode.js
+var decodeBase64Url = (str2) => {
+  return decodeBase64(str2.replace(/_|-/g, (m) => ({ _: "/", "-": "+" })[m] ?? m));
+};
+var encodeBase64Url = (buf) => encodeBase64(buf).replace(/\/|\+/g, (m) => ({ "/": "_", "+": "-" })[m] ?? m);
+var encodeBase64 = (buf) => {
+  let binary = "";
+  const bytes = new Uint8Array(buf);
+  for (let i = 0, len = bytes.length; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+};
+var decodeBase64 = (str2) => {
+  const binary = atob(str2);
+  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
+  const half = binary.length / 2;
+  for (let i = 0, j = binary.length - 1; i <= half; i++, j--) {
+    bytes[i] = binary.charCodeAt(i);
+    bytes[j] = binary.charCodeAt(j);
+  }
+  return bytes;
+};
+
+// ../../node_modules/.pnpm/hono@4.12.9/node_modules/hono/dist/utils/jwt/jwa.js
+var AlgorithmTypes = /* @__PURE__ */ ((AlgorithmTypes2) => {
+  AlgorithmTypes2["HS256"] = "HS256";
+  AlgorithmTypes2["HS384"] = "HS384";
+  AlgorithmTypes2["HS512"] = "HS512";
+  AlgorithmTypes2["RS256"] = "RS256";
+  AlgorithmTypes2["RS384"] = "RS384";
+  AlgorithmTypes2["RS512"] = "RS512";
+  AlgorithmTypes2["PS256"] = "PS256";
+  AlgorithmTypes2["PS384"] = "PS384";
+  AlgorithmTypes2["PS512"] = "PS512";
+  AlgorithmTypes2["ES256"] = "ES256";
+  AlgorithmTypes2["ES384"] = "ES384";
+  AlgorithmTypes2["ES512"] = "ES512";
+  AlgorithmTypes2["EdDSA"] = "EdDSA";
+  return AlgorithmTypes2;
+})(AlgorithmTypes || {});
+
+// ../../node_modules/.pnpm/hono@4.12.9/node_modules/hono/dist/helper/adapter/index.js
+var knownUserAgents = {
+  deno: "Deno",
+  bun: "Bun",
+  workerd: "Cloudflare-Workers",
+  node: "Node.js"
+};
+var getRuntimeKey = () => {
+  const global = globalThis;
+  const userAgentSupported = typeof navigator !== "undefined" && typeof navigator.userAgent === "string";
+  if (userAgentSupported) {
+    for (const [runtimeKey, userAgent] of Object.entries(knownUserAgents)) {
+      if (checkUserAgentEquals(userAgent)) {
+        return runtimeKey;
+      }
+    }
+  }
+  if (typeof global?.EdgeRuntime === "string") {
+    return "edge-light";
+  }
+  if (global?.fastly !== void 0) {
+    return "fastly";
+  }
+  if (global?.process?.release?.name === "node") {
+    return "node";
+  }
+  return "other";
+};
+var checkUserAgentEquals = (platform) => {
+  const userAgent = navigator.userAgent;
+  return userAgent.startsWith(platform);
+};
+
+// ../../node_modules/.pnpm/hono@4.12.9/node_modules/hono/dist/utils/jwt/types.js
+var JwtAlgorithmNotImplemented = class extends Error {
+  constructor(alg) {
+    super(`${alg} is not an implemented algorithm`);
+    this.name = "JwtAlgorithmNotImplemented";
+  }
+};
+var JwtAlgorithmRequired = class extends Error {
+  constructor() {
+    super('JWT verification requires "alg" option to be specified');
+    this.name = "JwtAlgorithmRequired";
+  }
+};
+var JwtAlgorithmMismatch = class extends Error {
+  constructor(expected, actual) {
+    super(`JWT algorithm mismatch: expected "${expected}", got "${actual}"`);
+    this.name = "JwtAlgorithmMismatch";
+  }
+};
+var JwtTokenInvalid = class extends Error {
+  constructor(token) {
+    super(`invalid JWT token: ${token}`);
+    this.name = "JwtTokenInvalid";
+  }
+};
+var JwtTokenNotBefore = class extends Error {
+  constructor(token) {
+    super(`token (${token}) is being used before it's valid`);
+    this.name = "JwtTokenNotBefore";
+  }
+};
+var JwtTokenExpired = class extends Error {
+  constructor(token) {
+    super(`token (${token}) expired`);
+    this.name = "JwtTokenExpired";
+  }
+};
+var JwtTokenIssuedAt = class extends Error {
+  constructor(currentTimestamp, iat) {
+    super(
+      `Invalid "iat" claim, must be a valid number lower than "${currentTimestamp}" (iat: "${iat}")`
+    );
+    this.name = "JwtTokenIssuedAt";
+  }
+};
+var JwtTokenIssuer = class extends Error {
+  constructor(expected, iss) {
+    super(`expected issuer "${expected}", got ${iss ? `"${iss}"` : "none"} `);
+    this.name = "JwtTokenIssuer";
+  }
+};
+var JwtHeaderInvalid = class extends Error {
+  constructor(header) {
+    super(`jwt header is invalid: ${JSON.stringify(header)}`);
+    this.name = "JwtHeaderInvalid";
+  }
+};
+var JwtHeaderRequiresKid = class extends Error {
+  constructor(header) {
+    super(`required "kid" in jwt header: ${JSON.stringify(header)}`);
+    this.name = "JwtHeaderRequiresKid";
+  }
+};
+var JwtSymmetricAlgorithmNotAllowed = class extends Error {
+  constructor(alg) {
+    super(`symmetric algorithm "${alg}" is not allowed for JWK verification`);
+    this.name = "JwtSymmetricAlgorithmNotAllowed";
+  }
+};
+var JwtAlgorithmNotAllowed = class extends Error {
+  constructor(alg, allowedAlgorithms) {
+    super(`algorithm "${alg}" is not in the allowed list: [${allowedAlgorithms.join(", ")}]`);
+    this.name = "JwtAlgorithmNotAllowed";
+  }
+};
+var JwtTokenSignatureMismatched = class extends Error {
+  constructor(token) {
+    super(`token(${token}) signature mismatched`);
+    this.name = "JwtTokenSignatureMismatched";
+  }
+};
+var JwtPayloadRequiresAud = class extends Error {
+  constructor(payload) {
+    super(`required "aud" in jwt payload: ${JSON.stringify(payload)}`);
+    this.name = "JwtPayloadRequiresAud";
+  }
+};
+var JwtTokenAudience = class extends Error {
+  constructor(expected, aud) {
+    super(
+      `expected audience "${Array.isArray(expected) ? expected.join(", ") : expected}", got "${aud}"`
+    );
+    this.name = "JwtTokenAudience";
+  }
+};
+var CryptoKeyUsage = /* @__PURE__ */ ((CryptoKeyUsage2) => {
+  CryptoKeyUsage2["Encrypt"] = "encrypt";
+  CryptoKeyUsage2["Decrypt"] = "decrypt";
+  CryptoKeyUsage2["Sign"] = "sign";
+  CryptoKeyUsage2["Verify"] = "verify";
+  CryptoKeyUsage2["DeriveKey"] = "deriveKey";
+  CryptoKeyUsage2["DeriveBits"] = "deriveBits";
+  CryptoKeyUsage2["WrapKey"] = "wrapKey";
+  CryptoKeyUsage2["UnwrapKey"] = "unwrapKey";
+  return CryptoKeyUsage2;
+})(CryptoKeyUsage || {});
+
+// ../../node_modules/.pnpm/hono@4.12.9/node_modules/hono/dist/utils/jwt/utf8.js
+var utf8Encoder = new TextEncoder();
+var utf8Decoder = new TextDecoder();
+
+// ../../node_modules/.pnpm/hono@4.12.9/node_modules/hono/dist/utils/jwt/jws.js
+async function signing(privateKey, alg, data) {
+  const algorithm = getKeyAlgorithm(alg);
+  const cryptoKey = await importPrivateKey(privateKey, algorithm);
+  return await crypto.subtle.sign(algorithm, cryptoKey, data);
+}
+async function verifying(publicKey, alg, signature, data) {
+  const algorithm = getKeyAlgorithm(alg);
+  const cryptoKey = await importPublicKey(publicKey, algorithm);
+  return await crypto.subtle.verify(algorithm, cryptoKey, signature, data);
+}
+function pemToBinary(pem) {
+  return decodeBase64(pem.replace(/-+(BEGIN|END).*/g, "").replace(/\s/g, ""));
+}
+async function importPrivateKey(key, alg) {
+  if (!crypto.subtle || !crypto.subtle.importKey) {
+    throw new Error("`crypto.subtle.importKey` is undefined. JWT auth middleware requires it.");
+  }
+  if (isCryptoKey(key)) {
+    if (key.type !== "private" && key.type !== "secret") {
+      throw new Error(
+        `unexpected key type: CryptoKey.type is ${key.type}, expected private or secret`
+      );
+    }
+    return key;
+  }
+  const usages = [CryptoKeyUsage.Sign];
+  if (typeof key === "object") {
+    return await crypto.subtle.importKey("jwk", key, alg, false, usages);
+  }
+  if (key.includes("PRIVATE")) {
+    return await crypto.subtle.importKey("pkcs8", pemToBinary(key), alg, false, usages);
+  }
+  return await crypto.subtle.importKey("raw", utf8Encoder.encode(key), alg, false, usages);
+}
+async function importPublicKey(key, alg) {
+  if (!crypto.subtle || !crypto.subtle.importKey) {
+    throw new Error("`crypto.subtle.importKey` is undefined. JWT auth middleware requires it.");
+  }
+  if (isCryptoKey(key)) {
+    if (key.type === "public" || key.type === "secret") {
+      return key;
+    }
+    key = await exportPublicJwkFrom(key);
+  }
+  if (typeof key === "string" && key.includes("PRIVATE")) {
+    const privateKey = await crypto.subtle.importKey("pkcs8", pemToBinary(key), alg, true, [
+      CryptoKeyUsage.Sign
+    ]);
+    key = await exportPublicJwkFrom(privateKey);
+  }
+  const usages = [CryptoKeyUsage.Verify];
+  if (typeof key === "object") {
+    return await crypto.subtle.importKey("jwk", key, alg, false, usages);
+  }
+  if (key.includes("PUBLIC")) {
+    return await crypto.subtle.importKey("spki", pemToBinary(key), alg, false, usages);
+  }
+  return await crypto.subtle.importKey("raw", utf8Encoder.encode(key), alg, false, usages);
+}
+async function exportPublicJwkFrom(privateKey) {
+  if (privateKey.type !== "private") {
+    throw new Error(`unexpected key type: ${privateKey.type}`);
+  }
+  if (!privateKey.extractable) {
+    throw new Error("unexpected private key is unextractable");
+  }
+  const jwk = await crypto.subtle.exportKey("jwk", privateKey);
+  const { kty } = jwk;
+  const { alg, e, n } = jwk;
+  const { crv, x: x2, y: y2 } = jwk;
+  return { kty, alg, e, n, crv, x: x2, y: y2, key_ops: [CryptoKeyUsage.Verify] };
+}
+function getKeyAlgorithm(name) {
+  switch (name) {
+    case "HS256":
+      return {
+        name: "HMAC",
+        hash: {
+          name: "SHA-256"
+        }
+      };
+    case "HS384":
+      return {
+        name: "HMAC",
+        hash: {
+          name: "SHA-384"
+        }
+      };
+    case "HS512":
+      return {
+        name: "HMAC",
+        hash: {
+          name: "SHA-512"
+        }
+      };
+    case "RS256":
+      return {
+        name: "RSASSA-PKCS1-v1_5",
+        hash: {
+          name: "SHA-256"
+        }
+      };
+    case "RS384":
+      return {
+        name: "RSASSA-PKCS1-v1_5",
+        hash: {
+          name: "SHA-384"
+        }
+      };
+    case "RS512":
+      return {
+        name: "RSASSA-PKCS1-v1_5",
+        hash: {
+          name: "SHA-512"
+        }
+      };
+    case "PS256":
+      return {
+        name: "RSA-PSS",
+        hash: {
+          name: "SHA-256"
+        },
+        saltLength: 32
+        // 256 >> 3
+      };
+    case "PS384":
+      return {
+        name: "RSA-PSS",
+        hash: {
+          name: "SHA-384"
+        },
+        saltLength: 48
+        // 384 >> 3
+      };
+    case "PS512":
+      return {
+        name: "RSA-PSS",
+        hash: {
+          name: "SHA-512"
+        },
+        saltLength: 64
+        // 512 >> 3,
+      };
+    case "ES256":
+      return {
+        name: "ECDSA",
+        hash: {
+          name: "SHA-256"
+        },
+        namedCurve: "P-256"
+      };
+    case "ES384":
+      return {
+        name: "ECDSA",
+        hash: {
+          name: "SHA-384"
+        },
+        namedCurve: "P-384"
+      };
+    case "ES512":
+      return {
+        name: "ECDSA",
+        hash: {
+          name: "SHA-512"
+        },
+        namedCurve: "P-521"
+      };
+    case "EdDSA":
+      return {
+        name: "Ed25519",
+        namedCurve: "Ed25519"
+      };
+    default:
+      throw new JwtAlgorithmNotImplemented(name);
+  }
+}
+function isCryptoKey(key) {
+  const runtime = getRuntimeKey();
+  if (runtime === "node" && !!crypto.webcrypto) {
+    return key instanceof crypto.webcrypto.CryptoKey;
+  }
+  return key instanceof CryptoKey;
+}
+
+// ../../node_modules/.pnpm/hono@4.12.9/node_modules/hono/dist/utils/jwt/jwt.js
+var encodeJwtPart = (part) => encodeBase64Url(utf8Encoder.encode(JSON.stringify(part)).buffer).replace(/=/g, "");
+var encodeSignaturePart = (buf) => encodeBase64Url(buf).replace(/=/g, "");
+var decodeJwtPart = (part) => JSON.parse(utf8Decoder.decode(decodeBase64Url(part)));
+function isTokenHeader(obj) {
+  if (typeof obj === "object" && obj !== null) {
+    const objWithAlg = obj;
+    return "alg" in objWithAlg && Object.values(AlgorithmTypes).includes(objWithAlg.alg) && (!("typ" in objWithAlg) || objWithAlg.typ === "JWT");
+  }
+  return false;
+}
+var sign = async (payload, privateKey, alg = "HS256") => {
+  const encodedPayload = encodeJwtPart(payload);
+  let encodedHeader;
+  if (typeof privateKey === "object" && "alg" in privateKey) {
+    alg = privateKey.alg;
+    encodedHeader = encodeJwtPart({ alg, typ: "JWT", kid: privateKey.kid });
+  } else {
+    encodedHeader = encodeJwtPart({ alg, typ: "JWT" });
+  }
+  const partialToken = `${encodedHeader}.${encodedPayload}`;
+  const signaturePart = await signing(privateKey, alg, utf8Encoder.encode(partialToken));
+  const signature = encodeSignaturePart(signaturePart);
+  return `${partialToken}.${signature}`;
+};
+var verify = async (token, publicKey, algOrOptions) => {
+  if (!algOrOptions) {
+    throw new JwtAlgorithmRequired();
+  }
+  const {
+    alg,
+    iss,
+    nbf = true,
+    exp = true,
+    iat = true,
+    aud
+  } = typeof algOrOptions === "string" ? { alg: algOrOptions } : algOrOptions;
+  if (!alg) {
+    throw new JwtAlgorithmRequired();
+  }
+  const tokenParts = token.split(".");
+  if (tokenParts.length !== 3) {
+    throw new JwtTokenInvalid(token);
+  }
+  const { header, payload } = decode(token);
+  if (!isTokenHeader(header)) {
+    throw new JwtHeaderInvalid(header);
+  }
+  if (header.alg !== alg) {
+    throw new JwtAlgorithmMismatch(alg, header.alg);
+  }
+  const now = Math.floor(Date.now() / 1e3);
+  if (nbf && payload.nbf && payload.nbf > now) {
+    throw new JwtTokenNotBefore(token);
+  }
+  if (exp && payload.exp && payload.exp <= now) {
+    throw new JwtTokenExpired(token);
+  }
+  if (iat && payload.iat && now < payload.iat) {
+    throw new JwtTokenIssuedAt(now, payload.iat);
+  }
+  if (iss) {
+    if (!payload.iss) {
+      throw new JwtTokenIssuer(iss, null);
+    }
+    if (typeof iss === "string" && payload.iss !== iss) {
+      throw new JwtTokenIssuer(iss, payload.iss);
+    }
+    if (iss instanceof RegExp && !iss.test(payload.iss)) {
+      throw new JwtTokenIssuer(iss, payload.iss);
+    }
+  }
+  if (aud) {
+    if (!payload.aud) {
+      throw new JwtPayloadRequiresAud(payload);
+    }
+    const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    const matched = audiences.some(
+      (payloadAud) => aud instanceof RegExp ? aud.test(payloadAud) : typeof aud === "string" ? payloadAud === aud : Array.isArray(aud) && aud.includes(payloadAud)
+    );
+    if (!matched) {
+      throw new JwtTokenAudience(aud, payload.aud);
+    }
+  }
+  const headerPayload = token.substring(0, token.lastIndexOf("."));
+  const verified = await verifying(
+    publicKey,
+    alg,
+    decodeBase64Url(tokenParts[2]),
+    utf8Encoder.encode(headerPayload)
+  );
+  if (!verified) {
+    throw new JwtTokenSignatureMismatched(token);
+  }
+  return payload;
+};
+var symmetricAlgorithms = [
+  AlgorithmTypes.HS256,
+  AlgorithmTypes.HS384,
+  AlgorithmTypes.HS512
+];
+var verifyWithJwks = async (token, options, init) => {
+  const verifyOpts = options.verification || {};
+  const header = decodeHeader(token);
+  if (!isTokenHeader(header)) {
+    throw new JwtHeaderInvalid(header);
+  }
+  if (!header.kid) {
+    throw new JwtHeaderRequiresKid(header);
+  }
+  if (symmetricAlgorithms.includes(header.alg)) {
+    throw new JwtSymmetricAlgorithmNotAllowed(header.alg);
+  }
+  if (!options.allowedAlgorithms.includes(header.alg)) {
+    throw new JwtAlgorithmNotAllowed(header.alg, options.allowedAlgorithms);
+  }
+  let verifyKeys = options.keys ? [...options.keys] : void 0;
+  if (options.jwks_uri) {
+    const response = await fetch(options.jwks_uri, init);
+    if (!response.ok) {
+      throw new Error(`failed to fetch JWKS from ${options.jwks_uri}`);
+    }
+    const data = await response.json();
+    if (!data.keys) {
+      throw new Error('invalid JWKS response. "keys" field is missing');
+    }
+    if (!Array.isArray(data.keys)) {
+      throw new Error('invalid JWKS response. "keys" field is not an array');
+    }
+    verifyKeys ??= [];
+    verifyKeys.push(...data.keys);
+  } else if (!verifyKeys) {
+    throw new Error('verifyWithJwks requires options for either "keys" or "jwks_uri" or both');
+  }
+  const matchingKey = verifyKeys.find((key) => key.kid === header.kid);
+  if (!matchingKey) {
+    throw new JwtTokenInvalid(token);
+  }
+  if (matchingKey.alg && matchingKey.alg !== header.alg) {
+    throw new JwtAlgorithmMismatch(matchingKey.alg, header.alg);
+  }
+  return await verify(token, matchingKey, {
+    alg: header.alg,
+    ...verifyOpts
+  });
+};
+var decode = (token) => {
+  const parts = token.split(".");
+  if (parts.length !== 3) {
+    throw new JwtTokenInvalid(token);
+  }
+  try {
+    const header = decodeJwtPart(parts[0]);
+    const payload = decodeJwtPart(parts[1]);
+    return {
+      header,
+      payload
+    };
+  } catch {
+    throw new JwtTokenInvalid(token);
+  }
+};
+var decodeHeader = (token) => {
+  const parts = token.split(".");
+  if (parts.length !== 3) {
+    throw new JwtTokenInvalid(token);
+  }
+  try {
+    return decodeJwtPart(parts[0]);
+  } catch {
+    throw new JwtTokenInvalid(token);
+  }
+};
+
+// ../../node_modules/.pnpm/hono@4.12.9/node_modules/hono/dist/utils/jwt/index.js
+var Jwt = { sign, verify, decode, verifyWithJwks };
+
+// ../../node_modules/.pnpm/hono@4.12.9/node_modules/hono/dist/middleware/jwt/jwt.js
+var verifyWithJwks2 = Jwt.verifyWithJwks;
+var verify2 = Jwt.verify;
+var decode2 = Jwt.decode;
+var sign2 = Jwt.sign;
+
+// src/lib/auth.ts
+var SESSION_COOKIE = "reed_session";
+var SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
+function hashPassword(password) {
+  const salt = (0, import_node_crypto.randomBytes)(16);
+  const hash = (0, import_node_crypto.scryptSync)(password, salt, 64);
+  return `scrypt:${salt.toString("hex")}:${hash.toString("hex")}`;
+}
+function verifyPassword(password, stored) {
+  const [scheme, saltHex, hashHex] = stored.split(":");
+  if (scheme !== "scrypt" || !saltHex || !hashHex) return false;
+  try {
+    const expected = Buffer.from(hashHex, "hex");
+    const actual = (0, import_node_crypto.scryptSync)(password, Buffer.from(saltHex, "hex"), expected.length);
+    return (0, import_node_crypto.timingSafeEqual)(actual, expected);
+  } catch {
+    return false;
+  }
+}
+function authSecret() {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) {
+    throw new Error("AUTH_SECRET is not set \u2014 cannot issue or verify sessions");
+  }
+  return secret;
+}
+async function createSessionToken(userId) {
+  return sign2(
+    { sub: userId, exp: Math.floor(Date.now() / 1e3) + SESSION_TTL_SECONDS },
+    authSecret(),
+    "HS256"
+  );
+}
+var requireAuth = createMiddleware(async (c, next) => {
+  const token = getCookie(c, SESSION_COOKIE) ?? c.req.header("authorization")?.slice("Bearer ".length);
+  if (!token) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    const payload = await verify2(token, authSecret(), "HS256");
+    if (typeof payload.sub !== "string") throw new Error("no subject");
+    c.set("userId", payload.sub);
+  } catch {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  await next();
+});
+function setSessionCookie(c, token) {
+  c.header(
+    "Set-Cookie",
+    `${SESSION_COOKIE}=${token}; Path=/; Max-Age=${SESSION_TTL_SECONDS}; HttpOnly; Secure; SameSite=Lax`
+  );
+}
+function clearSessionCookie(c) {
+  c.header("Set-Cookie", `${SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
+}
+
+// src/worker/routes/auth.ts
+var authRouter = new Hono2();
+var LEGACY_USER_ID = "legacy";
+function parseCredentials(body) {
+  const record = body;
+  const email = record?.email;
+  const password = record?.password;
+  if (typeof email !== "string" || typeof password !== "string") return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  return { email: email.trim().toLowerCase(), password };
+}
+async function jsonBody(c) {
+  try {
+    return await c.req.json();
+  } catch {
+    return null;
+  }
+}
+authRouter.post("/register", async (c) => {
+  const body = await jsonBody(c);
+  if (body === null) return c.json({ error: "Invalid JSON body" }, 400);
+  const requiredCode = process.env.SIGNUP_CODE;
+  if (requiredCode && body["code"] !== requiredCode) {
+    return c.json({ error: "Invalid invite code" }, 403);
+  }
+  const credentials = parseCredentials(body);
+  if (!credentials) return c.json({ error: "Valid email and password are required" }, 400);
+  if (credentials.password.length < 8) {
+    return c.json({ error: "Password must be at least 8 characters" }, 400);
+  }
+  const db2 = c.get("db");
+  const id = crypto.randomUUID();
+  try {
+    await db2.insert(users).values({
+      id,
+      email: credentials.email,
+      passwordHash: hashPassword(credentials.password),
+      createdAt: Date.now()
+    });
+  } catch (err) {
+    if (err instanceof Error && /UNIQUE|duplicate key/i.test(err.message)) {
+      return c.json({ error: "Email already registered" }, 409);
+    }
+    throw err;
+  }
+  await db2.update(folders).set({ userId: id }).where(eq(folders.userId, LEGACY_USER_ID));
+  await db2.update(feeds).set({ userId: id }).where(eq(feeds.userId, LEGACY_USER_ID));
+  const token = await createSessionToken(id);
+  setSessionCookie(c, token);
+  return c.json({ id, email: credentials.email }, 201);
+});
+authRouter.post("/login", async (c) => {
+  const body = await jsonBody(c);
+  if (body === null) return c.json({ error: "Invalid JSON body" }, 400);
+  const credentials = parseCredentials(body);
+  if (!credentials) return c.json({ error: "Invalid email or password" }, 401);
+  const db2 = c.get("db");
+  const rows = await db2.select({ id: users.id, passwordHash: users.passwordHash }).from(users).where(eq(users.email, credentials.email)).limit(1);
+  const user = rows[0];
+  if (!user || !verifyPassword(credentials.password, user.passwordHash)) {
+    return c.json({ error: "Invalid email or password" }, 401);
+  }
+  const token = await createSessionToken(user.id);
+  setSessionCookie(c, token);
+  return c.json({ id: user.id, email: credentials.email });
+});
+authRouter.post("/logout", (c) => {
+  clearSessionCookie(c);
+  return c.json({ ok: true });
+});
+authRouter.get("/me", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const db2 = c.get("db");
+  const rows = await db2.select({ id: users.id, email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+  const user = rows[0];
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  return c.json(user);
+});
 
 // src/lib/refresh.ts
 var import_node_net = require("node:net");
@@ -16530,7 +17309,7 @@ async function refreshFeed(feedId, db2) {
   let updated = 0;
   for (const article of parsed.articles) {
     if (!article.url) continue;
-    const existingRows = await db2.select({ id: articles.id, feedId: articles.feedId }).from(articles).where(eq(articles.url, article.url)).limit(1);
+    const existingRows = await db2.select({ id: articles.id }).from(articles).where(and(eq(articles.feedId, feedId), eq(articles.url, article.url))).limit(1);
     const existing = existingRows[0];
     if (!existing) {
       await db2.insert(articles).values({
@@ -16544,7 +17323,7 @@ async function refreshFeed(feedId, db2) {
         createdAt: Date.now()
       });
       added++;
-    } else if (existing.feedId === feedId) {
+    } else {
       await db2.update(articles).set({
         title: article.title,
         summary: article.summary,
@@ -16559,9 +17338,10 @@ async function refreshFeed(feedId, db2) {
 
 // src/worker/routes/feeds.ts
 var feedsRouter = new Hono2();
+feedsRouter.use("*", requireAuth);
 feedsRouter.get("/", async (c) => {
   const db2 = c.get("db");
-  const rows = await db2.select().from(feeds).orderBy(feeds.createdAt);
+  const rows = await db2.select().from(feeds).where(eq(feeds.userId, c.get("userId"))).orderBy(feeds.createdAt);
   return c.json(rows);
 });
 feedsRouter.post("/", async (c) => {
@@ -16581,7 +17361,8 @@ feedsRouter.post("/", async (c) => {
     return c.json({ error: err instanceof Error ? err.message : "Invalid URL" }, 400);
   }
   const db2 = c.get("db");
-  const existing = await db2.select({ id: feeds.id }).from(feeds).where(eq(feeds.url, feedUrl.trim())).limit(1);
+  const userId = c.get("userId");
+  const existing = await db2.select({ id: feeds.id }).from(feeds).where(and(eq(feeds.userId, userId), eq(feeds.url, feedUrl.trim()))).limit(1);
   if (existing.length > 0) {
     return c.json({ error: "Feed URL already exists" }, 409);
   }
@@ -16589,11 +17370,12 @@ feedsRouter.post("/", async (c) => {
   try {
     await db2.insert(feeds).values({
       id,
+      userId,
       url: feedUrl.trim(),
       createdAt: Date.now()
     });
   } catch (err) {
-    if (err instanceof Error && /UNIQUE/i.test(err.message)) {
+    if (err instanceof Error && /UNIQUE|duplicate key/i.test(err.message)) {
       return c.json({ error: "Feed URL already exists" }, 409);
     }
     throw err;
@@ -16604,7 +17386,7 @@ feedsRouter.post("/", async (c) => {
 feedsRouter.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const db2 = c.get("db");
-  const existing = await db2.select({ id: feeds.id }).from(feeds).where(eq(feeds.id, id)).limit(1);
+  const existing = await db2.select({ id: feeds.id }).from(feeds).where(and(eq(feeds.id, id), eq(feeds.userId, c.get("userId")))).limit(1);
   if (existing.length === 0) {
     return c.json({ error: "Feed not found" }, 404);
   }
@@ -16625,12 +17407,13 @@ feedsRouter.patch("/:id", async (c) => {
     return c.json({ error: "folderId (string | null) is required" }, 400);
   }
   const db2 = c.get("db");
-  const existing = await db2.select({ id: feeds.id }).from(feeds).where(eq(feeds.id, id)).limit(1);
+  const userId = c.get("userId");
+  const existing = await db2.select({ id: feeds.id }).from(feeds).where(and(eq(feeds.id, id), eq(feeds.userId, userId))).limit(1);
   if (existing.length === 0) {
     return c.json({ error: "Feed not found" }, 404);
   }
   if (folderId !== null) {
-    const folder = await db2.select({ id: folders.id }).from(folders).where(eq(folders.id, folderId)).limit(1);
+    const folder = await db2.select({ id: folders.id }).from(folders).where(and(eq(folders.id, folderId), eq(folders.userId, userId))).limit(1);
     if (folder.length === 0) {
       return c.json({ error: "Folder not found" }, 404);
     }
@@ -16642,7 +17425,7 @@ feedsRouter.patch("/:id", async (c) => {
 feedsRouter.post("/:id/refresh", async (c) => {
   const id = c.req.param("id");
   const db2 = c.get("db");
-  const existing = await db2.select({ id: feeds.id }).from(feeds).where(eq(feeds.id, id)).limit(1);
+  const existing = await db2.select({ id: feeds.id }).from(feeds).where(and(eq(feeds.id, id), eq(feeds.userId, c.get("userId")))).limit(1);
   if (existing.length === 0) {
     return c.json({ error: "Feed not found" }, 404);
   }
@@ -16657,13 +17440,20 @@ feedsRouter.post("/:id/refresh", async (c) => {
 
 // src/worker/routes/articles.ts
 var articlesRouter = new Hono2();
+articlesRouter.use("*", requireAuth);
 articlesRouter.get("/", async (c) => {
   const db2 = c.get("db");
   const feedId = c.req.query("feed_id");
   const folderId = c.req.query("folder_id");
   const unread = c.req.query("unread");
   const q = c.req.query("q")?.trim();
-  const conditions = [];
+  const conditions = [
+    // Every view is scoped to the session user's feeds
+    inArray(
+      articles.feedId,
+      db2.select({ id: feeds.id }).from(feeds).where(eq(feeds.userId, c.get("userId")))
+    )
+  ];
   if (q) {
     for (const token of q.split(/\s+/)) {
       const pattern = `%${token.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
@@ -16695,16 +17485,17 @@ articlesRouter.get("/", async (c) => {
     publishedAt: articles.publishedAt,
     read: articles.read,
     createdAt: articles.createdAt
-  }).from(articles).where(conditions.length > 0 ? and(...conditions) : void 0).orderBy(desc(articles.publishedAt));
+  }).from(articles).where(and(...conditions)).orderBy(desc(articles.publishedAt));
   return c.json(rows);
 });
 articlesRouter.get("/:id", async (c) => {
   const db2 = c.get("db");
-  const rows = await db2.select().from(articles).where(eq(articles.id, c.req.param("id"))).limit(1);
-  if (rows.length === 0) {
+  const rows = await db2.select({ article: articles }).from(articles).innerJoin(feeds, eq(articles.feedId, feeds.id)).where(and(eq(articles.id, c.req.param("id")), eq(feeds.userId, c.get("userId")))).limit(1);
+  const row = rows[0];
+  if (!row) {
     return c.json({ error: "Article not found" }, 404);
   }
-  return c.json(rows[0]);
+  return c.json(row.article);
 });
 articlesRouter.post("/read-all", async (c) => {
   const db2 = c.get("db");
@@ -16717,7 +17508,13 @@ articlesRouter.post("/read-all", async (c) => {
   if (feedId !== void 0 && typeof feedId !== "string") {
     return c.json({ error: "feedId must be a string" }, 400);
   }
-  const result = await db2.update(articles).set({ read: 1 }).where(feedId ? and(eq(articles.read, 0), eq(articles.feedId, feedId)) : eq(articles.read, 0));
+  const ownFeeds = inArray(
+    articles.feedId,
+    db2.select({ id: feeds.id }).from(feeds).where(eq(feeds.userId, c.get("userId")))
+  );
+  const result = await db2.update(articles).set({ read: 1 }).where(
+    feedId ? and(eq(articles.read, 0), eq(articles.feedId, feedId), ownFeeds) : and(eq(articles.read, 0), ownFeeds)
+  );
   return c.json({ marked: result.rowCount ?? 0 });
 });
 articlesRouter.patch("/:id", async (c) => {
@@ -16733,7 +17530,7 @@ articlesRouter.patch("/:id", async (c) => {
   if (typeof read !== "boolean") {
     return c.json({ error: "read (boolean) is required" }, 400);
   }
-  const existing = await db2.select({ id: articles.id }).from(articles).where(eq(articles.id, id)).limit(1);
+  const existing = await db2.select({ id: articles.id }).from(articles).innerJoin(feeds, eq(articles.feedId, feeds.id)).where(and(eq(articles.id, id), eq(feeds.userId, c.get("userId")))).limit(1);
   if (existing.length === 0) {
     return c.json({ error: "Article not found" }, 404);
   }
@@ -16744,13 +17541,14 @@ articlesRouter.patch("/:id", async (c) => {
 
 // src/worker/routes/folders.ts
 var foldersRouter = new Hono2();
+foldersRouter.use("*", requireAuth);
 function parseName(body) {
   const name = body?.name;
   return typeof name === "string" && name.trim() ? name.trim() : null;
 }
 foldersRouter.get("/", async (c) => {
   const db2 = c.get("db");
-  const rows = await db2.select().from(folders).orderBy(folders.createdAt);
+  const rows = await db2.select().from(folders).where(eq(folders.userId, c.get("userId"))).orderBy(folders.createdAt);
   return c.json(rows);
 });
 foldersRouter.post("/", async (c) => {
@@ -16765,12 +17563,13 @@ foldersRouter.post("/", async (c) => {
     return c.json({ error: "name is required" }, 400);
   }
   const db2 = c.get("db");
-  const existing = await db2.select({ id: folders.id }).from(folders).where(eq(folders.name, name)).limit(1);
+  const userId = c.get("userId");
+  const existing = await db2.select({ id: folders.id }).from(folders).where(and(eq(folders.userId, userId), eq(folders.name, name))).limit(1);
   if (existing.length > 0) {
     return c.json({ error: "Folder name already exists" }, 409);
   }
   const id = crypto.randomUUID();
-  await db2.insert(folders).values({ id, name, createdAt: Date.now() });
+  await db2.insert(folders).values({ id, userId, name, createdAt: Date.now() });
   const created = await db2.select().from(folders).where(eq(folders.id, id)).limit(1);
   return c.json(created[0], 201);
 });
@@ -16787,11 +17586,12 @@ foldersRouter.patch("/:id", async (c) => {
     return c.json({ error: "name is required" }, 400);
   }
   const db2 = c.get("db");
-  const existing = await db2.select({ id: folders.id }).from(folders).where(eq(folders.id, id)).limit(1);
+  const userId = c.get("userId");
+  const existing = await db2.select({ id: folders.id }).from(folders).where(and(eq(folders.id, id), eq(folders.userId, userId))).limit(1);
   if (existing.length === 0) {
     return c.json({ error: "Folder not found" }, 404);
   }
-  const duplicate = await db2.select({ id: folders.id }).from(folders).where(eq(folders.name, name)).limit(1);
+  const duplicate = await db2.select({ id: folders.id }).from(folders).where(and(eq(folders.userId, userId), eq(folders.name, name))).limit(1);
   if (duplicate[0] && duplicate[0].id !== id) {
     return c.json({ error: "Folder name already exists" }, 409);
   }
@@ -16802,7 +17602,7 @@ foldersRouter.patch("/:id", async (c) => {
 foldersRouter.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const db2 = c.get("db");
-  const existing = await db2.select({ id: folders.id }).from(folders).where(eq(folders.id, id)).limit(1);
+  const existing = await db2.select({ id: folders.id }).from(folders).where(and(eq(folders.id, id), eq(folders.userId, c.get("userId")))).limit(1);
   if (existing.length === 0) {
     return c.json({ error: "Folder not found" }, 404);
   }
@@ -16896,11 +17696,13 @@ function buildOpml(data) {
 
 // src/worker/routes/opml.ts
 var opmlRouter = new Hono2();
+opmlRouter.use("*", requireAuth);
 opmlRouter.get("/", async (c) => {
   const db2 = c.get("db");
+  const userId = c.get("userId");
   const [folderRows, feedRows] = await Promise.all([
-    db2.select().from(folders),
-    db2.select().from(feeds)
+    db2.select().from(folders).where(eq(folders.userId, userId)),
+    db2.select().from(feeds).where(eq(feeds.userId, userId))
   ]);
   const folderNames = new Map(folderRows.map((f) => [f.id, f.name]));
   const xml = buildOpml({
@@ -16931,8 +17733,15 @@ opmlRouter.post("/", async (c) => {
     return c.json({ error: "No feeds found in OPML" }, 400);
   }
   const db2 = c.get("db");
-  const existingUrls = new Set((await db2.select({ url: feeds.url }).from(feeds)).map((r) => r.url));
-  const existingFolders = new Map((await db2.select().from(folders)).map((f) => [f.name, f.id]));
+  const userId = c.get("userId");
+  const existingUrls = new Set(
+    (await db2.select({ url: feeds.url }).from(feeds).where(eq(feeds.userId, userId))).map(
+      (r) => r.url
+    )
+  );
+  const existingFolders = new Map(
+    (await db2.select().from(folders).where(eq(folders.userId, userId))).map((f) => [f.name, f.id])
+  );
   let feedsAdded = 0;
   let foldersCreated = 0;
   const feedsSkipped = data.feeds.filter((item) => existingUrls.has(item.url)).length;
@@ -16944,13 +17753,14 @@ opmlRouter.post("/", async (c) => {
       folderId = existingFolders.get(item.folder) ?? null;
       if (!folderId) {
         folderId = crypto.randomUUID();
-        await db2.insert(folders).values({ id: folderId, name: item.folder, createdAt: now });
+        await db2.insert(folders).values({ id: folderId, userId, name: item.folder, createdAt: now });
         existingFolders.set(item.folder, folderId);
         foldersCreated++;
       }
     }
     await db2.insert(feeds).values({
       id: crypto.randomUUID(),
+      userId,
       url: item.url,
       title: item.title,
       folderId,
@@ -16992,6 +17802,7 @@ function createApp(dbOverride) {
     console.error(err);
     return c.json({ error: "Internal server error" }, 500);
   });
+  app2.route("/api/auth", authRouter);
   app2.route("/api/feeds", feedsRouter);
   app2.route("/api/folders", foldersRouter);
   app2.route("/api/articles", articlesRouter);

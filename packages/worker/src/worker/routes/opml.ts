@@ -1,16 +1,21 @@
 import { Hono } from "hono";
+import { eq } from "drizzle-orm";
 import { feeds, folders } from "../../db/schema.ts";
 import { buildOpml, parseOpml } from "../../lib/opml.ts";
+import { requireAuth } from "../../lib/auth.ts";
 import type { Variables } from "../index.ts";
 
 export const opmlRouter = new Hono<{ Variables: Variables }>();
 
+opmlRouter.use("*", requireAuth);
+
 // GET /api/opml — export subscriptions as an OPML download
 opmlRouter.get("/", async (c) => {
   const db = c.get("db");
+  const userId = c.get("userId");
   const [folderRows, feedRows] = await Promise.all([
-    db.select().from(folders),
-    db.select().from(feeds),
+    db.select().from(folders).where(eq(folders.userId, userId)),
+    db.select().from(feeds).where(eq(feeds.userId, userId)),
   ]);
 
   const folderNames = new Map(folderRows.map((f) => [f.id, f.name]));
@@ -31,9 +36,10 @@ opmlRouter.get("/", async (c) => {
   });
 });
 
-// POST /api/opml — import an OPML body (text/xml). Feeds are matched by URL:
-// existing ones are skipped untouched; folders are matched by name and created
-// when missing. New feeds are picked up by the hourly refresh.
+// POST /api/opml — import an OPML body (text/xml). Feeds are matched by URL
+// within the user's own subscriptions: existing ones are skipped untouched;
+// folders are matched by name and created when missing. New feeds are picked
+// up by the hourly refresh.
 opmlRouter.post("/", async (c) => {
   const xml = await c.req.text();
   if (xml.length > 4_000_000) {
@@ -48,8 +54,15 @@ opmlRouter.post("/", async (c) => {
   }
 
   const db = c.get("db");
-  const existingUrls = new Set((await db.select({ url: feeds.url }).from(feeds)).map((r) => r.url));
-  const existingFolders = new Map((await db.select().from(folders)).map((f) => [f.name, f.id]));
+  const userId = c.get("userId");
+  const existingUrls = new Set(
+    (await db.select({ url: feeds.url }).from(feeds).where(eq(feeds.userId, userId))).map(
+      (r) => r.url,
+    ),
+  );
+  const existingFolders = new Map(
+    (await db.select().from(folders).where(eq(folders.userId, userId))).map((f) => [f.name, f.id]),
+  );
 
   let feedsAdded = 0;
   let foldersCreated = 0;
@@ -68,7 +81,9 @@ opmlRouter.post("/", async (c) => {
       folderId = existingFolders.get(item.folder) ?? null;
       if (!folderId) {
         folderId = crypto.randomUUID();
-        await db.insert(folders).values({ id: folderId, name: item.folder, createdAt: now });
+        await db
+          .insert(folders)
+          .values({ id: folderId, userId, name: item.folder, createdAt: now });
         existingFolders.set(item.folder, folderId);
         foldersCreated++;
       }
@@ -76,6 +91,7 @@ opmlRouter.post("/", async (c) => {
 
     await db.insert(feeds).values({
       id: crypto.randomUUID(),
+      userId,
       url: item.url,
       title: item.title,
       folderId,

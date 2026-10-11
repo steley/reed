@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { RefreshResult } from "@reed/types";
 import type { DB } from "../db/client.ts";
 import { articles, feeds } from "../db/schema.ts";
@@ -153,9 +153,8 @@ export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult
     })
     .where(eq(feeds.id, feedId));
 
-  // Upsert articles. articles.url is globally UNIQUE, so the same article can
-  // only be owned by one feed: a URL already stored under another feed is
-  // skipped (never overwritten, never claimed by this feed).
+  // Upsert articles. articles are unique per (feed_id, url): two users
+  // subscribing to the same feed URL each keep their own article rows.
   let added = 0;
   let updated = 0;
 
@@ -163,9 +162,9 @@ export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult
     if (!article.url) continue;
 
     const existingRows = await db
-      .select({ id: articles.id, feedId: articles.feedId })
+      .select({ id: articles.id })
       .from(articles)
-      .where(eq(articles.url, article.url))
+      .where(and(eq(articles.feedId, feedId), eq(articles.url, article.url)))
       .limit(1);
     const existing = existingRows[0];
 
@@ -181,7 +180,7 @@ export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult
         createdAt: Date.now(),
       });
       added++;
-    } else if (existing.feedId === feedId) {
+    } else {
       await db
         .update(articles)
         .set({
@@ -193,7 +192,6 @@ export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult
         .where(eq(articles.id, existing.id));
       updated++;
     }
-    // else: same article URL under a different feed — global dedupe, skip.
   }
 
   return { added, updated };

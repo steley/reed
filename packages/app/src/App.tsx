@@ -5,8 +5,16 @@ import { ArticleList } from "./components/ArticleList.tsx";
 import { ArticleReader } from "./components/ArticleReader.tsx";
 import { FeedSidebar } from "./components/FeedSidebar.tsx";
 import { ImportOpmlDialog } from "./components/ImportOpmlDialog.tsx";
+import { Login } from "./components/Login.tsx";
 import { NameDialog } from "./components/NameDialog.tsx";
-import { articlesApi, feedsApi, foldersApi, opmlApi } from "./lib/api.ts";
+import {
+  articlesApi,
+  authApi,
+  feedsApi,
+  foldersApi,
+  opmlApi,
+  setOnUnauthorized,
+} from "./lib/api.ts";
 
 const THEME_KEY = "reed-theme";
 
@@ -27,6 +35,25 @@ export function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sortAsc, setSortAsc] = useState(false);
   const [isDark, setIsDark] = useState(() => localStorage.getItem(THEME_KEY) === "dark");
+  // null = session check in flight; false = show the login gate
+  const [authed, setAuthed] = useState<boolean | null>(null);
+
+  // Any 401 from any API call drops the app back to the login screen
+  useEffect(() => {
+    setOnUnauthorized(() => setAuthed(false));
+    authApi
+      .me()
+      .then(() => setAuthed(true))
+      .catch(() => setAuthed(false));
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    try {
+      await authApi.logout();
+    } finally {
+      setAuthed(false);
+    }
+  }, []);
 
   // Apply color-scheme to <html> — all tokens use light-dark()
   useEffect(() => {
@@ -36,9 +63,10 @@ export function App() {
 
   // Load feeds and folders on mount
   useEffect(() => {
+    if (!authed) return;
     feedsApi.list().then(setFeeds).catch(console.error);
     foldersApi.list().then(setFolders).catch(console.error);
-  }, []);
+  }, [authed]);
 
   // Stale-while-revalidate cache of per-feed list responses (summaries only —
   // small). Key: feedId, "all" for the unfiltered view. Search responses are
@@ -106,8 +134,8 @@ export function App() {
     }
   }, []);
   useEffect(() => {
-    reloadUnread();
-  }, [reloadUnread]);
+    if (authed) reloadUnread();
+  }, [authed, reloadUnread]);
 
   const unreadCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -311,6 +339,9 @@ export function App() {
     return result;
   }, []);
 
+  if (authed === null) return null;
+  if (!authed) return <Login onAuthed={() => setAuthed(true)} />;
+
   return (
     <div className="flex h-dvh overflow-hidden bg-canvas text-ink">
       <FeedSidebar
@@ -325,6 +356,7 @@ export function App() {
         onAddFeed={() => setAddFeedOpen(true)}
         onAddFolder={() => setFolderDialog({ folderId: null, initial: "" })}
         onImportOpml={() => setImportOpmlOpen(true)}
+        onSignOut={handleSignOut}
         onRenameFolder={(id) =>
           setFolderDialog({
             folderId: id,

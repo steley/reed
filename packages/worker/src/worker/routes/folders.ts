@@ -1,9 +1,12 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { folders } from "../../db/schema.ts";
+import { requireAuth } from "../../lib/auth.ts";
 import type { Variables } from "../index.ts";
 
 export const foldersRouter = new Hono<{ Variables: Variables }>();
+
+foldersRouter.use("*", requireAuth);
 
 function parseName(body: unknown): string | null {
   const name = (body as Record<string, unknown> | null)?.name;
@@ -13,7 +16,11 @@ function parseName(body: unknown): string | null {
 // GET /api/folders
 foldersRouter.get("/", async (c) => {
   const db = c.get("db");
-  const rows = await db.select().from(folders).orderBy(folders.createdAt);
+  const rows = await db
+    .select()
+    .from(folders)
+    .where(eq(folders.userId, c.get("userId")))
+    .orderBy(folders.createdAt);
   return c.json(rows);
 });
 
@@ -32,18 +39,19 @@ foldersRouter.post("/", async (c) => {
   }
 
   const db = c.get("db");
+  const userId = c.get("userId");
 
   const existing = await db
     .select({ id: folders.id })
     .from(folders)
-    .where(eq(folders.name, name))
+    .where(and(eq(folders.userId, userId), eq(folders.name, name)))
     .limit(1);
   if (existing.length > 0) {
     return c.json({ error: "Folder name already exists" }, 409);
   }
 
   const id = crypto.randomUUID();
-  await db.insert(folders).values({ id, name, createdAt: Date.now() });
+  await db.insert(folders).values({ id, userId, name, createdAt: Date.now() });
 
   const created = await db.select().from(folders).where(eq(folders.id, id)).limit(1);
   return c.json(created[0], 201);
@@ -65,11 +73,12 @@ foldersRouter.patch("/:id", async (c) => {
   }
 
   const db = c.get("db");
+  const userId = c.get("userId");
 
   const existing = await db
     .select({ id: folders.id })
     .from(folders)
-    .where(eq(folders.id, id))
+    .where(and(eq(folders.id, id), eq(folders.userId, userId)))
     .limit(1);
   if (existing.length === 0) {
     return c.json({ error: "Folder not found" }, 404);
@@ -78,7 +87,7 @@ foldersRouter.patch("/:id", async (c) => {
   const duplicate = await db
     .select({ id: folders.id })
     .from(folders)
-    .where(eq(folders.name, name))
+    .where(and(eq(folders.userId, userId), eq(folders.name, name)))
     .limit(1);
   if (duplicate[0] && duplicate[0].id !== id) {
     return c.json({ error: "Folder name already exists" }, 409);
@@ -99,7 +108,7 @@ foldersRouter.delete("/:id", async (c) => {
   const existing = await db
     .select({ id: folders.id })
     .from(folders)
-    .where(eq(folders.id, id))
+    .where(and(eq(folders.id, id), eq(folders.userId, c.get("userId"))))
     .limit(1);
   if (existing.length === 0) {
     return c.json({ error: "Folder not found" }, 404);

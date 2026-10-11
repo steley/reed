@@ -40,12 +40,18 @@ let db: Awaited<ReturnType<typeof createTestDb>>;
 
 beforeEach(async (ctx) => {
   db = await createTestDb(ctx);
-  await db
-    .insert(feeds)
-    .values({ id: "feed-a", url: "https://a.example.com/feed", createdAt: Date.now() });
-  await db
-    .insert(feeds)
-    .values({ id: "feed-b", url: "https://b.example.com/feed", createdAt: Date.now() });
+  await db.insert(feeds).values({
+    userId: "u1",
+    id: "feed-a",
+    url: "https://a.example.com/feed",
+    createdAt: Date.now(),
+  });
+  await db.insert(feeds).values({
+    userId: "u1",
+    id: "feed-b",
+    url: "https://b.example.com/feed",
+    createdAt: Date.now(),
+  });
   vi.stubGlobal("fetch", vi.fn());
 });
 
