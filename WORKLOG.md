@@ -1538,3 +1538,54 @@ authentication (AUDIT-003 stays open by request).
   previously committed bundle (built by the old phantom version), so the
   regenerated bundle ships with this commit. Sanity-checked: bundle loads and
   exports all four method handlers.
+
+---
+
+## Increment — Brand mark redesign (logo + favicon)
+**Date:** 2026-10-11
+**Status:** Complete — lint/type-check/tests green. NOT committed yet.
+
+### Why
+User asked to regenerate the logo and favicon with meaning that fits the project
+theme. The old mark (three wind-swept reed stalks with ember plumes) read as
+generic grass at 16–32 px and said nothing about RSS.
+
+### New mark — "reed sprouting an RSS signal"
+One reed stalk grows from a ground line; its plume bends in the wind into the
+three concentric arcs of an RSS icon (dot + arcs), tilted -12° for the
+wind-blown feel. Reed = the reader, wind = the information flow, arcs = RSS.
+Same palette as before: warm paper tile `#faf9f7`, ink stem, ember gradient
+`#d9480f → #ff8a3d`; `prefers-color-scheme: dark` swaps to `#121212` tile +
+light stem + brighter gradient (CSS `<style>` inside the SVG).
+
+### What changed
+- `app/public/favicon.svg` — new mark, full-bleed rounded tile (rx 112).
+- `app/public/logo.svg` — same mark, transparent bg, fixed ink colors.
+- `app/public/favicon.png` (32×32) and `apple-touch-icon.png` (180×180) —
+  rasterized from the SVG with headless Chrome
+  (`--headless=new --screenshot --window-size=… --default-background-color=…`
+  over an `<img src="favicon.svg" style="width:100vw;height:100vh">` wrapper).
+  No rsvg-convert/ImageMagick on the machine; Chrome is the local renderer.
+- `app/src/components/icons.tsx` — `ReedMark` redrawn to the same geometry
+  (24 viewBox, CSS vars for theme-awareness).
+- `app/index.html` — favicon URLs cache-busted `?v=2` → `?v=3`.
+
+### Gotchas
+- Chrome headless defaults to light `prefers-color-scheme`, which is what the
+  PNGs want (iOS ignores dark anyway); the SVG favicon adapts on its own.
+- `userSpaceOnUse` gradient coords shared by dot + arcs so the ember gradient
+  flows continuously across the whole plume.
+- **apple-touch-icon must be full-bleed** (no rounded transparent corners —
+  iOS applies its own mask and fills transparent corners black). It renders
+  from a `rx="0"` variant of the favicon SVG (`/tmp` at build time, not
+  committed).
+- **Chrome headless is unreliable at small window sizes** (a 180px viewport
+  silently rendered the SVG unscaled/cropped twice; a 32px render worked;
+  512px always worked; one run wrote the file then hung instead of exiting —
+  background it, poll for the file, then kill). Working recipe: render at
+  512, downscale with `sips -z 180 180` (favicon.png 32 was a lucky direct
+  render, re-do it via the 512+sips path if it ever needs regenerating).
+
+### Deliberately NOT done
+- No maskable/Safari pinned-tab icon variants — single-user app, revisit if
+  the PWA story ever changes.

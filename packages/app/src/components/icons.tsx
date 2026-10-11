@@ -14,7 +14,7 @@ const base = (props: P) => ({
   ...props,
 });
 
-/** Brand mark: three wind-swept reeds. Ember plumes on ink stems (theme-aware). */
+/** Brand mark: a reed stalk whose wind-blown plume bends into RSS signal arcs (theme-aware). */
 export const ReedMark = (props: P) => (
   <svg
     width={20}
@@ -25,16 +25,13 @@ export const ReedMark = (props: P) => (
     aria-hidden
     {...props}
   >
-    <g stroke="var(--color-ink)" strokeWidth={2.2}>
-      <path d="M6.3 20.5 C6.5 18.4 6.9 16.5 7.4 14.8" />
-      <path d="M11 20.5 C10.8 15.6 10.9 10.9 11 6.6" />
-      <path d="M15.8 20.5 C16.1 17.1 16.3 13.5 16.5 10.2" />
-    </g>
-    <path d="M4 21 H20" stroke="var(--color-ink-3)" strokeWidth={1.8} />
-    <g fill="var(--color-accent)">
-      <path d="M7.4 15.4 C7.1 13.7 7.6 12 9.2 10.8 C9.4 12.6 8.8 14.2 7.4 15.4 Z" />
-      <path d="M11 7.6 C10.7 4.9 11.3 2.6 13.4 1.1 C13.7 3.8 12.8 6 11 7.6 Z" />
-      <path d="M16.5 11 C16.2 9 16.7 7.2 18.6 5.8 C18.8 7.8 18.1 9.7 16.5 11 Z" />
+    <path d="M8.4 20.8 C8.1 18.2 8.0 15.8 8.3 13.4" stroke="var(--color-ink)" strokeWidth={2.2} />
+    <path d="M4 21.5 H20" stroke="var(--color-ink-3)" strokeWidth={1.8} />
+    <g stroke="var(--color-accent)" strokeWidth={2.2} transform="rotate(-12 8.5 11.6)">
+      <circle cx="8.5" cy="11.6" r="1.9" fill="var(--color-accent)" stroke="none" />
+      <path d="M8.5 8.5 A3.1 3.1 0 0 1 11.6 11.6" />
+      <path d="M8.5 5.5 A6.1 6.1 0 0 1 14.6 11.6" />
+      <path d="M8.5 2.5 A9.1 9.1 0 0 1 17.6 11.6" />
     </g>
   </svg>
 );

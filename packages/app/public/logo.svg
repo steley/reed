@@ -1,20 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Reed logo — three wind-swept reed stalks. Ink stems, ember plumes. -->
+  <!-- Reed logo — a reed stalk whose wind-blown plume bends into the three arcs of an RSS signal. Transparent background, fixed ink colors. -->
   <defs>
-    <linearGradient id="plume" x1="0" y1="1" x2="1" y2="0">
+    <linearGradient id="plume" gradientUnits="userSpaceOnUse" x1="178" y1="328" x2="410" y2="96">
       <stop offset="0" stop-color="#d9480f"/>
       <stop offset="1" stop-color="#ff8a3d"/>
     </linearGradient>
   </defs>
-  <g fill="none" stroke="#1f1d1a" stroke-width="8" stroke-linecap="round">
-    <path d="M124 436 C128 396 134 360 140 332"/>
-    <path d="M208 436 C204 352 206 264 208 196"/>
-    <path d="M290 436 C296 372 302 312 306 256"/>
-  </g>
-  <path d="M100 448 H412" fill="none" stroke="#b3afa7" stroke-width="7" stroke-linecap="round"/>
-  <g fill="url(#plume)">
-    <path d="M140 332 C136 306 144 280 170 260 C174 288 164 312 140 332 Z"/>
-    <path d="M208 200 C202 160 212 122 248 94 C254 136 238 170 208 200 Z"/>
-    <path d="M306 256 C300 224 310 194 342 172 C346 206 334 234 306 256 Z"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M182 434 C176 402 174 372 177 344" stroke="#1f1d1a" stroke-width="22"/>
+    <path d="M126 452 H386" stroke="#b3afa7" stroke-width="15"/>
+    <g stroke="url(#plume)" stroke-width="34" transform="rotate(-12 178 328)">
+      <circle cx="178" cy="328" r="27" fill="url(#plume)" stroke="none"/>
+      <path d="M178 240 A88 88 0 0 1 266 328"/>
+      <path d="M178 168 A160 160 0 0 1 338 328"/>
+      <path d="M178 96 A232 232 0 0 1 410 328"/>
+    </g>
   </g>
 </svg>
