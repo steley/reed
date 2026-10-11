@@ -156,7 +156,8 @@ function atomText(val: unknown): string | null {
 /**
  * Extract href from an Atom <link> element.
  * Handles both single objects and arrays of link objects.
- * Pass `rel` to filter by relation, or null to take the first link.
+ * Pass `rel` to filter by relation, or null to take the first link that is
+ * not rel="self" (the feed's own URL is never a useful site/article link).
  */
 function atomLink(val: unknown, rel: string | null): string | null {
   const links = arr(val);
@@ -164,8 +165,12 @@ function atomLink(val: unknown, rel: string | null): string | null {
     const l = link as Record<string, unknown>;
     const href = str(l["@_href"]);
     if (!href) continue;
-    if (rel === null) return href;
-    if (str(l["@_rel"]) === rel) return href;
+    const linkRel = str(l["@_rel"]);
+    if (rel === null) {
+      if (linkRel !== "self") return href;
+      continue;
+    }
+    if (linkRel === rel) return href;
   }
   return null;
 }

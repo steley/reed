@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { articles, feeds } from "../../db/schema.ts";
 import type { Variables } from "../index.ts";
 
@@ -51,7 +51,7 @@ articlesRouter.get("/", async (c) => {
     .select()
     .from(articles)
     .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(articles.publishedAt);
+    .orderBy(desc(articles.publishedAt));
 
   return c.json(rows);
 });
@@ -68,7 +68,7 @@ articlesRouter.post("/read-all", async (c) => {
     // empty body = mark everything
   }
 
-  const feedId = (body as Record<string, unknown>).feedId;
+  const feedId = (body as Record<string, unknown> | null)?.feedId;
   if (feedId !== undefined && typeof feedId !== "string") {
     return c.json({ error: "feedId must be a string" }, 400);
   }
@@ -94,7 +94,7 @@ articlesRouter.patch("/:id", async (c) => {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
 
-  const read = (body as Record<string, unknown>).read;
+  const read = (body as Record<string, unknown> | null)?.read;
   if (typeof read !== "boolean") {
     return c.json({ error: "read (boolean) is required" }, 400);
   }

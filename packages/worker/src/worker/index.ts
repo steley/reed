@@ -34,7 +34,7 @@ export function createApp(dbOverride?: DB) {
   // Real health check: verifies the database connection, not just the process.
   app.get("/api/health", async (c) => {
     try {
-      const db = getDb();
+      const db = c.get("db") ?? getDb();
       await db.run(sql`SELECT 1`);
       return c.json({ status: "ok", db: "connected" });
     } catch (err) {
@@ -45,7 +45,12 @@ export function createApp(dbOverride?: DB) {
     }
   });
 
-  app.onError((err, c) => c.json({ error: err.message }, 500));
+  // Log the real error server-side; return a generic message so internal
+  // details (DB hostnames, env problems) never reach an unauthenticated caller.
+  app.onError((err, c) => {
+    console.error(err);
+    return c.json({ error: "Internal server error" }, 500);
+  });
 
   app.route("/api/feeds", feedsRouter);
   app.route("/api/folders", foldersRouter);

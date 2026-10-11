@@ -15,6 +15,9 @@ export interface OpmlData {
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
+  // Match the feed parser's expansion cap — subscription lists with lots of
+  // escaped HTML in titles shouldn't fail the 10k default.
+  processEntities: { maxTotalExpansions: 100000 },
 });
 
 // Outline children may be single objects or arrays — normalize with toArray.

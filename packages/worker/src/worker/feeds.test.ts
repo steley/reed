@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { feeds, folders } from "../db/schema.ts";
+import { articles, feeds, folders } from "../db/schema.ts";
 import { createTestDb } from "../lib/test-helpers.ts";
 import { createApp } from "./index.ts";
+
+// refreshFeed's SSRF guard resolves hostnames — keep it off the network here.
+vi.mock("node:dns/promises", () => ({
+  lookup: vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]),
+}));
 
 const RSS_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -223,5 +228,31 @@ describe("POST /api/feeds/:id/refresh", () => {
 
     const res = await app.request("/api/feeds/rf-2/refresh", { method: "POST" });
     expect(res.status).toBe(502);
+  });
+
+  it("returns 400 for a non-http(s) URL", async () => {
+    const res = await app.request("/api/feeds", {
+      method: "POST",
+      body: JSON.stringify({ url: "ftp://example.com/feed" }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("DELETE /api/feeds/:id — article cleanup", () => {
+  it("deletes the feed's articles too, without relying on FK cascade", async () => {
+    await db.insert(feeds).values({ id: "del-1", url: "https://del.com/feed", createdAt: 1 });
+    await db.insert(articles).values({
+      id: "art-1",
+      feedId: "del-1",
+      url: "https://del.com/one",
+      createdAt: 1,
+    });
+
+    const res = await app.request("/api/feeds/del-1", { method: "DELETE" });
+    expect(res.status).toBe(204);
+
+    const remaining = await db.select().from(articles).where(eq(articles.feedId, "del-1"));
+    expect(remaining).toHaveLength(0);
   });
 });

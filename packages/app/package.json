@@ -7,11 +7,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest --passWithNoTests",
+    "test:run": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@reed/types": "workspace:*",
     "@tailwindcss/vite": "^4.2.2",
+    "dompurify": "^3.4.16",
     "marked": "^17.0.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -21,7 +24,9 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^30.1.2",
     "typescript": "^5.7.3",
-    "vite": "^6.3.1"
+    "vite": "^6.3.1",
+    "vitest": "^3.1.1"
   }
 }

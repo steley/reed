@@ -36,6 +36,9 @@ opmlRouter.get("/", async (c) => {
 // when missing. New feeds are picked up by the hourly refresh.
 opmlRouter.post("/", async (c) => {
   const xml = await c.req.text();
+  if (xml.length > 4_000_000) {
+    return c.json({ error: "OPML file too large" }, 413);
+  }
   const data = parseOpml(xml);
   if (!data) {
     return c.json({ error: "Invalid OPML file" }, 400);
@@ -50,14 +53,15 @@ opmlRouter.post("/", async (c) => {
 
   let feedsAdded = 0;
   let foldersCreated = 0;
-  let feedsSkipped = 0;
-  const now = Date.now();
+  const feedsSkipped = data.feeds.filter((item) => existingUrls.has(item.url)).length;
 
+  // ponytail: sequential inserts, no transaction — drizzle's libsql transaction
+  // opens a fresh connection on file:/memory: DBs (fails in tests/local dev), and
+  // single-user scale accepts the mid-import partial-failure ceiling (AUDIT-006).
+  // Upgrade path: batch via the raw libsql client when it matters.
+  const now = Date.now();
   for (const item of data.feeds) {
-    if (existingUrls.has(item.url)) {
-      feedsSkipped++;
-      continue;
-    }
+    if (existingUrls.has(item.url)) continue;
 
     let folderId: string | null = null;
     if (item.folder) {

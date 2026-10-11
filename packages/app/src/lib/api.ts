@@ -121,13 +121,16 @@ export const opmlApi = {
 // ---------------------------------------------------------------------------
 
 export const articlesApi = {
-  list(opts?: { feedId?: string; unread?: boolean; q?: string }): Promise<Article[]> {
+  list(
+    opts?: { feedId?: string; unread?: boolean; q?: string },
+    signal?: AbortSignal,
+  ): Promise<Article[]> {
     const params = new URLSearchParams();
     if (opts?.feedId) params.set("feed_id", opts.feedId);
     if (opts?.unread) params.set("unread", "true");
     if (opts?.q) params.set("q", opts.q);
     const qs = params.size > 0 ? `?${params.toString()}` : "";
-    return request<Article[]>(`/articles${qs}`);
+    return request<Article[]>(`/articles${qs}`, signal ? { signal } : undefined);
   },
 
   readAll(feedId?: string): Promise<{ marked: number }> {

@@ -40,21 +40,30 @@ export function App() {
     foldersApi.list().then(setFolders).catch(console.error);
   }, []);
 
-  const reloadArticles = useCallback(async (feedId: string | null, q?: string) => {
-    const query = q?.trim();
-    const opts = {
-      ...(feedId ? { feedId } : {}),
-      ...(query ? { q: query } : {}),
-    };
-    setArticles(await articlesApi.list(opts));
-  }, []);
+  const reloadArticles = useCallback(
+    async (feedId: string | null, q?: string, signal?: AbortSignal) => {
+      const query = q?.trim();
+      const opts = {
+        ...(feedId ? { feedId } : {}),
+        ...(query ? { q: query } : {}),
+      };
+      setArticles(await articlesApi.list(opts, signal));
+    },
+    [],
+  );
 
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Load articles when the selected feed or search query changes
+  // Load articles when the selected feed or search query changes. Each effect
+  // run aborts the previous in-flight request so a slow stale response can
+  // never overwrite the newer one.
   useEffect(() => {
-    reloadArticles(selectedFeedId, searchQuery).catch(console.error);
+    const controller = new AbortController();
+    reloadArticles(selectedFeedId, searchQuery, controller.signal).catch((err: unknown) => {
+      if ((err as Error).name !== "AbortError") console.error(err);
+    });
     setSelectedArticleId(null);
+    return () => controller.abort();
   }, [selectedFeedId, searchQuery, reloadArticles]);
 
   // All unread articles across every feed — single source of truth for the
@@ -104,8 +113,12 @@ export function App() {
   // Mark all (or all in the selected feed) as read; refreshes both the view
   // list and the sidebar unread badges
   const handleMarkAllRead = useCallback(async () => {
-    await articlesApi.readAll(selectedFeedId ?? undefined);
-    await Promise.all([reloadArticles(selectedFeedId, searchQuery), reloadUnread()]);
+    try {
+      await articlesApi.readAll(selectedFeedId ?? undefined);
+      await Promise.all([reloadArticles(selectedFeedId, searchQuery), reloadUnread()]);
+    } catch (err) {
+      console.error("Mark all read failed:", err);
+    }
   }, [selectedFeedId, searchQuery, reloadArticles, reloadUnread]);
 
   const handleAddFeed = useCallback(
@@ -127,27 +140,39 @@ export function App() {
 
   const handleDeleteFeed = useCallback(
     async (id: string) => {
-      await feedsApi.delete(id);
-      setFeeds((prev) => prev.filter((f) => f.id !== id));
-      if (selectedFeedId === id) {
-        setSelectedFeedId(null);
-        setSelectedArticleId(null);
+      try {
+        await feedsApi.delete(id);
+        setFeeds((prev) => prev.filter((f) => f.id !== id));
+        if (selectedFeedId === id) {
+          setSelectedFeedId(null);
+          setSelectedArticleId(null);
+        }
+        // The deleted feed's articles must leave the current view too
+        await reloadArticles(selectedFeedId, searchQuery);
+        await reloadUnread();
+      } catch (err) {
+        console.error("Delete feed failed:", err);
       }
-      await reloadUnread();
     },
-    [selectedFeedId, reloadUnread],
+    [selectedFeedId, searchQuery, reloadArticles, reloadUnread],
   );
 
   const handleMarkRead = useCallback(async (id: string, read: boolean) => {
-    const updated = await articlesApi.update(id, { read });
-    setArticles((prev) => prev.map((a) => (a.id === id ? updated : a)));
-    setUnreadList((prev) =>
-      read
-        ? prev.filter((a) => a.id !== id)
-        : prev.some((a) => a.id === id)
-          ? prev
-          : [...prev, updated],
-    );
+    try {
+      const updated = await articlesApi.update(id, { read });
+      setArticles((prev) => prev.map((a) => (a.id === id ? updated : a)));
+      setUnreadList((prev) =>
+        read
+          ? prev.filter((a) => a.id !== id)
+          : prev.some((a) => a.id === id)
+            ? prev
+            : [...prev, updated],
+      );
+    } catch (err) {
+      // Auto-mark-read on selection must never throw an unhandled rejection;
+      // state simply stays as-is until the next reload
+      console.error("Mark read failed:", err);
+    }
   }, []);
 
   const handleSelectArticle = useCallback(
@@ -178,18 +203,26 @@ export function App() {
   }, []);
 
   const handleDeleteFolder = useCallback(async (id: string) => {
-    await foldersApi.delete(id);
-    setFolders((prev) => prev.filter((f) => f.id !== id));
-    // Feeds survive; move them back to uncategorized in local state
-    setFeeds((prev) => prev.map((f) => (f.folderId === id ? { ...f, folderId: null } : f)));
+    try {
+      await foldersApi.delete(id);
+      setFolders((prev) => prev.filter((f) => f.id !== id));
+      // Feeds survive; move them back to uncategorized in local state
+      setFeeds((prev) => prev.map((f) => (f.folderId === id ? { ...f, folderId: null } : f)));
+    } catch (err) {
+      console.error("Delete folder failed:", err);
+    }
   }, []);
 
   const handleMoveFeed = useCallback(
     async (feedId: string, folderId: string | null) => {
       const feed = feeds.find((f) => f.id === feedId);
       if (!feed || feed.folderId === folderId) return;
-      const updated = await feedsApi.update(feedId, { folderId });
-      setFeeds((prev) => prev.map((f) => (f.id === feedId ? updated : f)));
+      try {
+        const updated = await feedsApi.update(feedId, { folderId });
+        setFeeds((prev) => prev.map((f) => (f.id === feedId ? updated : f)));
+      } catch (err) {
+        console.error("Move feed failed:", err);
+      }
     },
     [feeds],
   );

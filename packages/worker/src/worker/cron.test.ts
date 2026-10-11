@@ -3,6 +3,11 @@ import { articles, feeds } from "../db/schema.ts";
 import { createTestDb } from "../lib/test-helpers.ts";
 import { runCron } from "./cron.ts";
 
+// refreshFeed's SSRF guard resolves hostnames — keep it off the network here.
+vi.mock("node:dns/promises", () => ({
+  lookup: vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]),
+}));
+
 const RSS_FEED_A = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
@@ -66,8 +71,10 @@ describe("runCron", () => {
       .mockResolvedValueOnce(new Response("error", { status: 500 }))
       .mockResolvedValueOnce(new Response(RSS_FEED_B, { status: 200 }));
 
-    // Should not throw even though feed-a fails
-    await expect(runCron(db)).resolves.toBeUndefined();
+    // Should not throw even though feed-a fails — but the failure is reported
+    const failures = await runCron(db);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!.feedId).toBe("feed-a");
 
     const stored = await db.select().from(articles);
     // Only feed-b articles stored — feed-a failed
@@ -78,7 +85,7 @@ describe("runCron", () => {
   it("succeeds with no feeds", async () => {
     // Clear feeds
     await db.delete(feeds);
-    await expect(runCron(db)).resolves.toBeUndefined();
+    await expect(runCron(db)).resolves.toEqual([]);
     expect(fetch).not.toHaveBeenCalled();
   });
 });

@@ -14329,6 +14329,10 @@ function getDb() {
   return drizzle(client, { schema: schema_exports });
 }
 
+// src/lib/refresh.ts
+var import_node_net = require("node:net");
+var import_promises = require("node:dns/promises");
+
 // src/lib/parse.ts
 var import_fast_xml_parser = __toESM(require_fxp(), 1);
 var parser = new import_fast_xml_parser.XMLParser({
@@ -14452,32 +14456,123 @@ function atomLink(val, rel) {
     const href = str(l["@_href"]);
     if (!href)
       continue;
-    if (rel === null)
-      return href;
-    if (str(l["@_rel"]) === rel)
+    const linkRel = str(l["@_rel"]);
+    if (rel === null) {
+      if (linkRel !== "self")
+        return href;
+      continue;
+    }
+    if (linkRel === rel)
       return href;
   }
   return null;
 }
 
 // src/lib/refresh.ts
+var FETCH_TIMEOUT_MS = 1e4;
+var MAX_RESPONSE_BYTES = 5e6;
+var MAX_REDIRECTS = 5;
+function assertFetchableUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid feed URL: ${url}`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`Feed URL must be http(s): ${url}`);
+  }
+}
+function isPrivateIp(ip) {
+  if (ip.includes(":")) {
+    const v6 = ip.toLowerCase();
+    if (v6 === "::" || v6 === "::1")
+      return true;
+    if (v6.startsWith("::ffff:"))
+      return isPrivateIp(v6.slice(7));
+    return /^(f[cd]|fe[89ab])/.test(v6);
+  }
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p)))
+    return true;
+  const [a, b] = parts;
+  if (a === 0 || a === 10 || a === 127)
+    return true;
+  if (a === 100 && b >= 64 && b <= 127)
+    return true;
+  if (a === 169 && b === 254)
+    return true;
+  if (a === 172 && b >= 16 && b <= 31)
+    return true;
+  if (a === 192 && b === 168)
+    return true;
+  return false;
+}
+async function assertPublicHost(hostname) {
+  const addresses = (0, import_node_net.isIP)(hostname) ? [hostname] : (await (0, import_promises.lookup)(hostname, { all: true })).map((a) => a.address);
+  if (addresses.some(isPrivateIp)) {
+    throw new Error(`Refusing to fetch private address for ${hostname}`);
+  }
+}
+async function readBodyWithLimit(response, url) {
+  const declared = Number(response.headers.get("content-length") ?? 0);
+  if (declared > MAX_RESPONSE_BYTES) {
+    throw new Error(`Feed response from ${url} exceeds ${MAX_RESPONSE_BYTES} byte limit`);
+  }
+  const reader = response.body?.getReader();
+  if (!reader)
+    return "";
+  const decoder = new TextDecoder();
+  let text2 = "";
+  let total = 0;
+  for (; ; ) {
+    const { done, value } = await reader.read();
+    if (done)
+      break;
+    total += value.byteLength;
+    if (total > MAX_RESPONSE_BYTES) {
+      await reader.cancel();
+      throw new Error(`Feed response from ${url} exceeds ${MAX_RESPONSE_BYTES} byte limit`);
+    }
+    text2 += decoder.decode(value, { stream: true });
+  }
+  return text2 + decoder.decode();
+}
+async function fetchFeedXml(url) {
+  let target = url;
+  for (let hop = 0; ; hop++) {
+    assertFetchableUrl(target);
+    await assertPublicHost(new URL(target).hostname);
+    const response = await fetch(target, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
+      },
+      redirect: "manual",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+    });
+    const location = response.headers.get("location");
+    if (response.status >= 300 && response.status < 400 && location) {
+      await response.body?.cancel();
+      if (hop >= MAX_REDIRECTS) {
+        throw new Error(`Too many redirects fetching ${url}`);
+      }
+      target = new URL(location, target).href;
+      continue;
+    }
+    if (!response.ok) {
+      throw new Error(`Failed to fetch feed ${target}: ${response.status} ${response.statusText}`);
+    }
+    return readBodyWithLimit(response, target);
+  }
+}
 async function refreshFeed(feedId, db) {
   const feedRows = await db.select().from(feeds).where(eq(feeds.id, feedId)).limit(1);
   const feed = feedRows[0];
   if (!feed) {
     throw new Error(`Feed not found: ${feedId}`);
   }
-  const response = await fetch(feed.url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
-    },
-    redirect: "follow"
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch feed ${feed.url}: ${response.status} ${response.statusText}`);
-  }
-  const xml = await response.text();
+  const xml = await fetchFeedXml(feed.url);
   const parsed = parseFeed(xml);
   if (!parsed) {
     throw new Error(`Failed to parse feed ${feed.url}: unrecognized format`);
@@ -14494,8 +14589,9 @@ async function refreshFeed(feedId, db) {
   for (const article of parsed.articles) {
     if (!article.url)
       continue;
-    const existing = await db.select({ id: articles.id }).from(articles).where(eq(articles.url, article.url)).limit(1);
-    if (existing.length === 0) {
+    const existingRows = await db.select({ id: articles.id, feedId: articles.feedId }).from(articles).where(eq(articles.url, article.url)).limit(1);
+    const existing = existingRows[0];
+    if (!existing) {
       await db.insert(articles).values({
         id: crypto.randomUUID(),
         feedId,
@@ -14507,13 +14603,13 @@ async function refreshFeed(feedId, db) {
         createdAt: Date.now()
       });
       added++;
-    } else {
+    } else if (existing.feedId === feedId) {
       await db.update(articles).set({
         title: article.title,
         summary: article.summary,
         content: article.content,
         publishedAt: article.publishedAt
-      }).where(eq(articles.url, article.url));
+      }).where(eq(articles.id, existing.id));
       updated++;
     }
   }
@@ -14534,9 +14630,14 @@ feedsRouter.post("/", async (c) => {
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
-  const feedUrl = body.url;
+  const feedUrl = body?.url;
   if (typeof feedUrl !== "string" || !feedUrl.trim()) {
     return c.json({ error: "url is required" }, 400);
+  }
+  try {
+    assertFetchableUrl(feedUrl.trim());
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Invalid URL" }, 400);
   }
   const db = c.get("db");
   const existing = await db.select({ id: feeds.id }).from(feeds).where(eq(feeds.url, feedUrl.trim())).limit(1);
@@ -14544,11 +14645,18 @@ feedsRouter.post("/", async (c) => {
     return c.json({ error: "Feed URL already exists" }, 409);
   }
   const id = crypto.randomUUID();
-  await db.insert(feeds).values({
-    id,
-    url: feedUrl.trim(),
-    createdAt: Date.now()
-  });
+  try {
+    await db.insert(feeds).values({
+      id,
+      url: feedUrl.trim(),
+      createdAt: Date.now()
+    });
+  } catch (err) {
+    if (err instanceof Error && /UNIQUE/i.test(err.message)) {
+      return c.json({ error: "Feed URL already exists" }, 409);
+    }
+    throw err;
+  }
   const created = await db.select().from(feeds).where(eq(feeds.id, id)).limit(1);
   return c.json(created[0], 201);
 });
@@ -14559,6 +14667,7 @@ feedsRouter.delete("/:id", async (c) => {
   if (existing.length === 0) {
     return c.json({ error: "Feed not found" }, 404);
   }
+  await db.delete(articles).where(eq(articles.feedId, id));
   await db.delete(feeds).where(eq(feeds.id, id));
   return new Response(null, { status: 204 });
 });
@@ -14570,7 +14679,7 @@ feedsRouter.patch("/:id", async (c) => {
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
-  const folderId = body.folderId;
+  const folderId = body?.folderId;
   if (folderId !== null && typeof folderId !== "string") {
     return c.json({ error: "folderId (string | null) is required" }, 400);
   }
@@ -14643,7 +14752,7 @@ articlesRouter.get("/", async (c) => {
   }
   if (unread === "true")
     conditions.push(eq(articles.read, 0));
-  const rows = await db.select().from(articles).where(conditions.length > 0 ? and(...conditions) : void 0).orderBy(articles.publishedAt);
+  const rows = await db.select().from(articles).where(conditions.length > 0 ? and(...conditions) : void 0).orderBy(desc(articles.publishedAt));
   return c.json(rows);
 });
 articlesRouter.post("/read-all", async (c) => {
@@ -14653,7 +14762,7 @@ articlesRouter.post("/read-all", async (c) => {
     body = await c.req.json();
   } catch {
   }
-  const feedId = body.feedId;
+  const feedId = body?.feedId;
   if (feedId !== void 0 && typeof feedId !== "string") {
     return c.json({ error: "feedId must be a string" }, 400);
   }
@@ -14669,7 +14778,7 @@ articlesRouter.patch("/:id", async (c) => {
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
-  const read = body.read;
+  const read = body?.read;
   if (typeof read !== "boolean") {
     return c.json({ error: "read (boolean) is required" }, 400);
   }
@@ -14755,7 +14864,10 @@ foldersRouter.delete("/:id", async (c) => {
 var import_fast_xml_parser2 = __toESM(require_fxp(), 1);
 var parser2 = new import_fast_xml_parser2.XMLParser({
   ignoreAttributes: false,
-  attributeNamePrefix: "@_"
+  attributeNamePrefix: "@_",
+  // Match the feed parser's expansion cap — subscription lists with lots of
+  // escaped HTML in titles shouldn't fail the 10k default.
+  processEntities: { maxTotalExpansions: 1e5 }
 });
 function toArray(value) {
   if (value === void 0 || value === null)
@@ -14861,6 +14973,9 @@ opmlRouter.get("/", async (c) => {
 });
 opmlRouter.post("/", async (c) => {
   const xml = await c.req.text();
+  if (xml.length > 4e6) {
+    return c.json({ error: "OPML file too large" }, 413);
+  }
   const data = parseOpml(xml);
   if (!data) {
     return c.json({ error: "Invalid OPML file" }, 400);
@@ -14873,13 +14988,11 @@ opmlRouter.post("/", async (c) => {
   const existingFolders = new Map((await db.select().from(folders)).map((f) => [f.name, f.id]));
   let feedsAdded = 0;
   let foldersCreated = 0;
-  let feedsSkipped = 0;
+  const feedsSkipped = data.feeds.filter((item) => existingUrls.has(item.url)).length;
   const now = Date.now();
   for (const item of data.feeds) {
-    if (existingUrls.has(item.url)) {
-      feedsSkipped++;
+    if (existingUrls.has(item.url))
       continue;
-    }
     let folderId = null;
     if (item.folder) {
       folderId = existingFolders.get(item.folder) ?? null;
@@ -14919,7 +15032,7 @@ function createApp(dbOverride) {
   });
   app2.get("/api/health", async (c) => {
     try {
-      const db = getDb();
+      const db = c.get("db") ?? getDb();
       await db.run(sql`SELECT 1`);
       return c.json({ status: "ok", db: "connected" });
     } catch (err) {
@@ -14929,7 +15042,10 @@ function createApp(dbOverride) {
       );
     }
   });
-  app2.onError((err, c) => c.json({ error: err.message }, 500));
+  app2.onError((err, c) => {
+    console.error(err);
+    return c.json({ error: "Internal server error" }, 500);
+  });
   app2.route("/api/feeds", feedsRouter);
   app2.route("/api/folders", foldersRouter);
   app2.route("/api/articles", articlesRouter);

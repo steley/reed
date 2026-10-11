@@ -1448,3 +1448,81 @@ dependencies flagged.
 
 ### Follow-up (same increment)
 - README Features list mentions mark-all-read; no code changes.
+
+## Increment — Audit remediation (all findings except auth)
+**Date:** 2026-10-11
+**Status:** Complete — 98 tests passing, lint/type-check/build/bundle all green. NOT committed yet.
+
+### Why
+Full project audit (AUDIT-REPORT.md, independently verified) + a second external
+review converged on the same priorities. User directive: fix everything except
+authentication (AUDIT-003 stays open by request).
+
+### What was fixed
+- **AUDIT-001 (HIGH, stored XSS):** `app/src/lib/sanitize.ts` — `sanitizeArticleHtml()`
+  (DOMPurify) now wraps `marked.parse` in `ArticleReader`, the only innerHTML sink.
+  5 XSS regression tests (`sanitize.test.ts`) — the app package gained vitest.
+  **Gotcha: happy-dom breaks DOMPurify** (misparses template content — kept
+  `<script>`, dropped `<p>`); switched to jsdom, which DOMPurify officially supports.
+  Bundle: 254 → 301 KB raw (95 KB gzip) — accepted cost for the sanitizer.
+- **AUDIT-002 (SSRF):** `lib/refresh.ts` rewritten fetch path — `assertFetchableUrl()`
+  (http/https only) at insert (400) and before every hop; `assertPublicHost()` resolves
+  DNS and rejects loopback/private/link-local/CGNAT (IPv4 ranges + IPv6
+  unique-local/link-local; `::ffff:` mapped handled); redirects now followed **manually**
+  (max 5) so each hop re-qualifies; `AbortSignal.timeout(10s)`; body streamed with a
+  5 MB cap (`readBodyWithLimit`). OPML import body capped at 4 MB (413).
+  Consequence: localhost/private feed URLs are refused — note for local feed testing.
+- **AUDIT-004:** feed delete now deletes articles explicitly (`feeds.ts`) — never
+  trust the FK cascade's pragma state. Test added.
+- **AUDIT-005:** upsert is ownership-scoped: existing URL under another feed is
+  **skipped** (no overwrite, no count). Global-dedupe rule is now explicit; do not
+  widen the where-clause back to URL-only. Cross-feed test added.
+- **AUDIT-006 (partial):** concurrent duplicate feed insert maps UNIQUE → 409 instead
+  of 500. OPML import stays sequential — drizzle's libsql transaction opens a fresh
+  connection on `file:`/`:memory:` DBs (fails tests + local dev), so the
+  partial-import ceiling is documented in-code (`ponytail:` comment) instead.
+- **AUDIT-007:** articles effect aborts the previous request (`AbortController`;
+  `articlesApi.list` takes a signal). AbortError swallowed.
+- **AUDIT-008:** try/catch + console.error in `handleMarkRead`, `handleMarkAllRead`,
+  `handleDeleteFeed`, `handleDeleteFolder`, `handleMoveFeed` — no more unhandled
+  rejections from direct event handlers (dialog-driven flows already caught).
+- **AUDIT-009:** `handleDeleteFeed` reloads the view list — deleted feed's articles
+  leave "All articles" immediately.
+- **AUDIT-010:** `runCron()` returns failures; `scripts/refresh.ts` logs each to
+  stderr and sets `process.exitCode = 1` — a broken feed now turns Actions red.
+- **AUDIT-012:** `onError` returns generic `{"error":"Internal server error"}` and
+  logs the real error server-side (health + refresh 502 keep their actionable
+  messages deliberately).
+- **AUDIT-013:** null-safe body casts (`| null)?.`) in feeds/articles routes — a
+  JSON `null` body is 400-shaped, not a 500.
+- **A-2:** Atom `rel="self"` links never win the link fallback (parse.ts). Test added.
+- **A-3:** dead `allowBuilds` placeholder block removed from `pnpm-workspace.yaml`.
+- **A-4:** `/api/health` uses the injected db when present — no more "degraded" in
+  local dev.
+- **A-6:** server order is `publishedAt DESC` (matches client default; was dead ASC).
+- **A-7:** OPML parser entity cap raised to 100k (matches feed parser).
+- **CI gap:** new `.github/workflows/ci.yml` — lint → type-check → tests → build →
+  API-bundle freshness, on push/PR. Local pre-commit remains the fast path.
+- **.env.example:** rewritten from Cloudflare D1 leftovers to Turso vars.
+
+### Deliberately NOT done
+- **Auth (AUDIT-003):** excluded per user instruction — still open before any
+  untrusted-audience deployment.
+- **Pagination/column pruning (AUDIT-011):** scale-conditional feature change, not a
+  bug; revisit when the corpus warrants.
+- **Cron concurrency limit / 5–15min cadence:** rejected — no freshness requirement,
+  single-user feed count doesn't warrant a semaphore.
+- **Highlight-vs-raw-text mismatch (A-8):** cosmetic, display-only.
+
+### Gotchas
+- drizzle `db.transaction()` + libsql `:memory:`/`file:` = "no such table" inside the
+  transaction (fresh connection). Do not reach for transactions in route code unless
+  production Turso-only and tested.
+- Tests that stub `fetch` must also mock `node:dns/promises` now (refreshFeed does a
+  real DNS lookup per hop) — `vi.mock("node:dns/promises", ...)` in refresh/cron/feeds
+  test files.
+- `exactOptionalPropertyTypes`: `request(path, { signal })` fails tsc when signal is
+  possibly undefined — pass `signal ? { signal } : undefined`.
+- Redirect-loop tests use `Response(body, { status: 301, headers: { Location } })` —
+  works under undici; `res.body?.cancel()` before discarding 3xx responses avoids
+  leaked connections.

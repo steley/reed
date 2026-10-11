@@ -30,3 +30,7 @@ dump.sql
 
 # Vitest
 coverage/
+
+# Project audit artifacts (local only)
+/audit/
+/AUDIT-REPORT.md

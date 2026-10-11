@@ -247,7 +247,7 @@ Base path: `/api`
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/feeds` | List all feeds |
-| `POST` | `/api/feeds` | Add feed `{ url: string }` → `201` |
+| `POST` | `/api/feeds` | Add feed `{ url: string }` → `201`; non-`http(s)` URL → `400` |
 | `PATCH` | `/api/feeds/:id` | Move feed into/out of a folder `{ folderId: string \| null }` → `200` |
 | `DELETE` | `/api/feeds/:id` | Delete feed + cascade articles → `204` |
 | `POST` | `/api/feeds/:id/refresh` | Manually refresh feed → `200 { added, updated }` |
@@ -272,9 +272,38 @@ All error responses: `{ error: string }` with appropriate HTTP status.
 on-the-hour crons under load). It checks out the repo, installs pnpm deps, and runs
 `pnpm --filter @reed/worker refresh` (→ `scripts/refresh.ts`), which
 calls `runCron()` — `refreshFeed()` for every feed in Turso, using
-`Promise.allSettled` so one failing feed does not abort others.
+`Promise.allSettled` so one failing feed does not abort others. `runCron()`
+returns the failures; the script logs each one to stderr and sets
+`process.exitCode = 1` when any feed failed, so a broken feed turns the
+Actions run red instead of silently passing forever.
+
+### Feed fetch guardrails (SSRF)
+Feed URLs are untrusted input (anyone who can reach the unauthenticated API can
+register one). `refreshFeed()` validates before every fetch hop via
+`assertFetchableUrl()` + `assertPublicHost()` in `lib/refresh.ts`: only
+`http:`/`https:` schemes, hostnames resolved through DNS and rejected when they
+resolve to loopback/private/link-local/CGNAT addresses (IPv4 ranges + IPv6
+unique-local/link-local; literal IPs checked without DNS), redirects followed
+**manually** (`redirect: "manual"` + loop, max 5) so each hop re-qualifies,
+10s `AbortSignal.timeout`, response body streamed with a 5 MB cap. The same
+scheme check runs at `POST /api/feeds` insert time (→ 400). `POST /api/opml`
+bodies are capped at 4 MB. Consequence: feeds on localhost/private-network
+URLs are refused — use a public URL (or a tunnel) when testing locally.
+
+### Article ownership on refresh
+`articles.url` is globally UNIQUE — one article row, one owning feed. If two
+feeds carry the same article URL, the feed that stored it first keeps
+ownership; later refreshes of other feeds **skip** that URL (no overwrite, no
+count as added/updated). Never widen the upsert's where-clause back to URL-only.
 
 Required repository secrets: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`.
+
+## CI (GitHub Actions)
+
+`.github/workflows/ci.yml` runs on push to main and PRs: lint → type-check →
+tests → frontend build → API-bundle freshness (`pnpm build:api` +
+`git diff --exit-code api/index.js`). The pre-commit hook remains the local
+fast path; CI is the backstop for commits that bypass it.
 
 ## Environment Variables
 
@@ -298,9 +327,9 @@ repository secrets; locally they can be exported in the shell or set per-command
 - **Layout:** three panes — sidebar (w-64, mobile drawer with scrim), list (`md:w-[380px]`), reader (flex-1). On mobile the list and reader swap by `selectedArticle` state; no routing library.
 - **Folders:** sidebar groups feeds into folders (`Folders` section + uncategorized `Feeds` section). Order is auto-ascending by display name via `compareNames()` (`localeCompare`, handles mixed Chinese/English) — no manual ordering, no order columns. Folder rows expand/collapse on click (chevron): default collapsed, auto-expanded while the folder has unread articles or contains the selected feed; manual choices live in a `expandOverride` map in `FeedSidebar` local state (session-only). Collapsing a folder that holds the selected feed deselects it first (`onSelectFeed(null)`) so the active row never hides itself. Feeds move via native HTML5 drag-and-drop (`draggable` rows; folder rows and the uncategorized section are drop targets → `PATCH /api/feeds/:id`) — dropping onto a collapsed folder works. Folders rename/delete via a hand-rolled right-click context menu (`FeedSidebar.tsx`); feeds get their own context menu (right-click or 500ms long-press on touch) with a "Move to" folder list + uncategorized + delete — that is the touch path for folder assignment, since HTML5 DnD does not work on touch. `NameDialog.tsx` is the shared single-name prompt for create/rename. The context menus must render outside the `<aside>` element — the aside's translate transform makes it the containing block for `position: fixed` descendants. The server's `GET /api/articles?folder_id=` filter has no UI consumer since folder article views were removed — kept as API surface (CLI).
 - **OPML import/export:** `···` button in the sidebar wordmark row opens a menu (Import OPML… / Export OPML), rendered outside the `<aside>` like the folder context menu. Export is a plain `<a href="/api/opml">` — the API's `Content-Disposition` triggers the download, no fetch wrapper. Import goes through `ImportOpmlDialog.tsx` (`file.text()` → POST `/api/opml`) and App reloads feeds+folders afterwards; the dialog shows result counts and a Done button. Import semantics are server-side (see API table): additive only, URL-dedupe for feeds, name-dedupe for folders. Parsing/generation lives in `worker/src/lib/opml.ts` on the existing `fast-xml-parser` dep — no OPML library.
-- **Article content rendering:** `marked` converts markdown → HTML, injected via `dangerouslySetInnerHTML`. 
+- **Article content rendering:** `marked` converts markdown → HTML, then `sanitizeArticleHtml()` (`lib/sanitize.ts`, DOMPurify) sanitizes it before the single `dangerouslySetInnerHTML` sink in `ArticleReader` — feed content is untrusted third-party input (audit AUDIT-001). Never add a second innerHTML sink without going through that helper. The sanitizer's regression tests live in `lib/sanitize.test.ts` (vitest + **jsdom** — happy-dom's DOM misparses template content and breaks DOMPurify).
 - **Sort order:** client-side by `publishedAt ?? createdAt`, toggleable newest/oldest. Default newest-first.
-- **Search:** a search input under the list header (`searchQuery` state in App, input in `ArticleList`) — every keystroke refetches `articlesApi.list({ feedId, q })`, so search composes with the selected feed (empty query = normal view). No debounce: single-user, one cheap query per keystroke. Matches are highlighted client-side in the list (see FTS section under Key Design Decisions).
+- **Search:** a search input under the list header (`searchQuery` state in App, input in `ArticleList`) — every keystroke refetches `articlesApi.list({ feedId, q })`, so search composes with the selected feed (empty query = normal view). No debounce: single-user, one cheap query per keystroke. The loading effect aborts the previous request (`AbortController`) so out-of-order responses can't show a stale list. Matches are highlighted client-side in the list (see FTS section under Key Design Decisions).
 - **Mark all read:** double-check button in the list header (only rendered while the current view has unread) → `POST /api/articles/read-all` scoped to the selected feed, or global when "All articles" is selected; App reloads the view list + `unreadList` afterwards. No confirm — unread state is the only thing at risk.
 - **Unread counts:** sidebar badges derive from a dedicated full unread fetch (`articlesApi.list({ unread: true })` → `unreadList` in App), never from the view-scoped `articles` state — that list is filtered by the current feed selection, so counts derived from it would vanish the moment a feed is selected. `handleMarkRead` keeps `unreadList` in sync for immediate feedback.
 - **Auto-mark-read:** selecting an article marks it read automatically.
@@ -309,7 +338,7 @@ repository secrets; locally they can be exported in the shell or set per-command
 
 - **Exports:** named exports only, no default exports except in `vite.config.ts`
 - **File naming:** `kebab-case.ts`, test files colocated as `foo.test.ts`
-- **Error handling:** API endpoints return `{ error: string }` JSON, never throw to the client
+- **Error handling:** API endpoints return `{ error: string }` JSON, never throw to the client. Unexpected errors surface as a generic `{"error":"Internal server error"}` with the real error only in server logs — internal details (DB hostnames, env problems) must not reach an unauthenticated caller.
 - **Types:** always import from `@reed/types`, never redefine inline
 - **SQL:** Drizzle query builder for all queries, raw `sql` template tag only when necessary
 - **IDs:** always `crypto.randomUUID()`

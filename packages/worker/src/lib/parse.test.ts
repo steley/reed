@@ -184,3 +184,24 @@ describe("parseFeed — edge cases", () => {
     expect(result!.articles[0]!.content).toContain("<p>text</p>");
   });
 });
+
+describe("parseFeed — Atom link rel fallback", () => {
+  it("never falls back to a rel=self link", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>T</title>
+  <link rel="self" href="https://example.com/feed.xml"/>
+  <link rel="enclosure" href="https://example.com/audio.mp3"/>
+  <entry>
+    <title>E</title>
+    <link rel="self" href="https://example.com/entry-self"/>
+    <link rel="enclosure" href="https://example.com/entry.mp3"/>
+    <id>https://example.com/entry</id>
+  </entry>
+</feed>`;
+    const parsed = parseFeed(xml)!;
+    expect(parsed).not.toBeNull();
+    expect(parsed.meta.siteUrl).toBe("https://example.com/audio.mp3");
+    expect(parsed.articles[0]!.url).toBe("https://example.com/entry.mp3");
+  });
+});
