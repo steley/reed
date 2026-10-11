@@ -62,6 +62,12 @@ export const Moon = (props: P) => (
   </svg>
 );
 
+export const Filter = (props: P) => (
+  <svg {...base(props)}>
+    <path d="M3 5h18l-7 8v5l-4 2v-7L3 5Z" />
+  </svg>
+);
+
 export const Sort = (props: P) => (
   <svg {...base(props)}>
     <path d="M7 4v16m0 0-3-3m3 3 3-3" />

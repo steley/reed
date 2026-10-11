@@ -18,6 +18,11 @@ import {
 
 const THEME_KEY = "reed-theme";
 
+// SWR list-cache key covers both filter states so toggling unread can't hit
+// the other view's stale list
+const cacheKey = (feedId: string | null, unreadOnly: boolean) =>
+  `${feedId ?? "all"}:${unreadOnly ? "unread" : "all"}`;
+
 export function App() {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -34,6 +39,8 @@ export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false); // mobile drawer
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sortAsc, setSortAsc] = useState(false);
+  // Server-side unread filter for the article list; default on
+  const [unreadOnly, setUnreadOnly] = useState(true);
   const [isDark, setIsDark] = useState(() => localStorage.getItem(THEME_KEY) === "dark");
   // null = session check in flight; false = show the login gate
   const [authed, setAuthed] = useState<boolean | null>(null);
@@ -81,12 +88,13 @@ export function App() {
       const opts = {
         ...(feedId ? { feedId } : {}),
         ...(query ? { q: query } : {}),
+        ...(unreadOnly ? { unread: true } : {}),
       };
       const list = await articlesApi.list(opts, signal);
       setArticles(list);
-      if (!query) articlesCache.current.set(feedId ?? "all", list);
+      if (!query) articlesCache.current.set(cacheKey(feedId, unreadOnly), list);
     },
-    [],
+    [unreadOnly],
   );
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -108,7 +116,7 @@ export function App() {
     // on a feed switch → clear the list so the spinner shows instead.
     const cached = searchQuery.trim()
       ? undefined
-      : articlesCache.current.get(selectedFeedId ?? "all");
+      : articlesCache.current.get(cacheKey(selectedFeedId, unreadOnly));
     if (feedChanged || cached) setArticles(cached ?? []);
     setIsLoadingArticles(!cached);
     reloadArticles(selectedFeedId, searchQuery, controller.signal)
@@ -120,7 +128,7 @@ export function App() {
         if (!controller.signal.aborted) setIsLoadingArticles(false);
       });
     return () => controller.abort();
-  }, [selectedFeedId, searchQuery, reloadArticles]);
+  }, [selectedFeedId, searchQuery, unreadOnly, reloadArticles]);
 
   // All unread articles across every feed — single source of truth for the
   // sidebar badges. Derived from the view-scoped `articles` list instead and
@@ -257,11 +265,11 @@ export function App() {
       const updated = await articlesApi.update(id, { read });
       const mark = (list: ArticleListItem[]) => list.map((a) => (a.id === id ? updated : a));
       setArticles(mark);
-      // Keep the SWR cache honest so switching back doesn't flash stale
-      // read-state before the background revalidate lands
-      for (const key of [updated.feedId, "all"]) {
+      // Any cached view containing this article gets the update — the key
+      // set depends on the unread filter, so don't guess it
+      for (const key of articlesCache.current.keys()) {
         const entry = articlesCache.current.get(key);
-        if (entry) articlesCache.current.set(key, mark(entry));
+        if (entry?.some((a) => a.id === id)) articlesCache.current.set(key, mark(entry));
       }
       setUnreadList((prev) =>
         read
@@ -384,11 +392,13 @@ export function App() {
           feedsById={Object.fromEntries(feeds.map((f) => [f.id, f]))}
           isRefreshing={isRefreshing}
           sortAsc={sortAsc}
+          unreadOnly={unreadOnly}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           onOpenMenu={() => setSidebarOpen(true)}
           onSelectArticle={handleSelectArticle}
           onToggleSort={() => setSortAsc((s) => !s)}
+          onToggleUnread={() => setUnreadOnly((u) => !u)}
           onMarkAllRead={handleMarkAllRead}
           onRefresh={handleRefresh}
         />

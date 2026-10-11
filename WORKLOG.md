@@ -2184,3 +2184,35 @@ content width, wide blocks scroll inside the figure. Bare (non-figure)
 tables keep the `display: block` scrolling rule. `display: table` +
 `overflow-x: auto` on the table itself was tested and rejected: the table
 grows past the pane without ever scrolling.
+
+## Increment — Unread-only filter toggle for the article list
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was built
+- New funnel button in the article list header, placed between the mark-all-read
+  button and the sort button (user asked for "before sort/refresh"). Active state
+  renders `text-accent` (matching the accent-dot unread marker), inactive is the
+  standard `text-ink-3` icon button.
+- `unreadOnly` state in App, default **on**: the list shows only unread articles
+  until toggled. Filter is server-side (`articlesApi.list({ unread: true })`),
+  so it composes with `feed_id` and `q` in the same query — no client-side
+  filtering and no extra round trip.
+- New `Filter` icon in `icons.tsx` (funnel, same stroke style as the others).
+
+### Decisions made
+- **Server-side over client-side:** the API already supports `unread=true`;
+  client filtering would require fetching read articles only to hide them.
+- **Cache keys include the filter state** (`cacheKey()` → `"<feedId>:unread"|"all"`):
+  toggling the filter must not paint the other view's cached list. As a
+  simplification, `handleMarkRead` now walks every cache entry containing the
+  article instead of guessing the two keys for the current filter.
+- Opening an article still auto-marks it read; in unread-only mode the card
+  stays visible until the next reload (matches Reeder behaviour, avoids yanking
+  the pane out from under the reader).
+
+### Options considered and discarded
+- Client-side filter on the `articles` state: rejected — payloads already fetch
+  everything, and the server filter composes with search for free.
+- Persisting the toggle in localStorage: rejected for now — default-unread is
+  the requested default; add persistence if it annoys.

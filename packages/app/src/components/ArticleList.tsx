@@ -1,6 +1,6 @@
 import type { ArticleListItem, Feed } from "@reed/types";
 import { cleanSummary, feedDisplayName, highlightParts, relativeTime } from "../lib/display.ts";
-import { MarkAllRead, Menu, Refresh, Sort } from "./icons.tsx";
+import { Filter, MarkAllRead, Menu, Refresh, Sort } from "./icons.tsx";
 
 /** Render `text` with the search tokens wrapped in <mark>. */
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -30,12 +30,14 @@ interface Props {
   feedsById: Record<string, Feed>;
   isRefreshing: boolean;
   sortAsc: boolean;
+  unreadOnly: boolean;
   searchQuery: string;
   onSearchChange(query: string): void;
   // mobile: show as full screen list (article not selected)
   onOpenMenu(): void;
   onSelectArticle(id: string): void;
   onToggleSort(): void;
+  onToggleUnread(): void;
   onMarkAllRead(): void;
   onRefresh(): void;
 }
@@ -48,11 +50,13 @@ export function ArticleList({
   feedsById,
   isRefreshing,
   sortAsc,
+  unreadOnly,
   searchQuery,
   onSearchChange,
   onOpenMenu,
   onSelectArticle,
   onToggleSort,
+  onToggleUnread,
   onMarkAllRead,
   onRefresh,
 }: Props) {
@@ -92,6 +96,18 @@ export function ArticleList({
             <MarkAllRead width={15} height={15} />
           </button>
         )}
+        <button
+          type="button"
+          onClick={onToggleUnread}
+          aria-pressed={unreadOnly}
+          aria-label="Toggle unread filter"
+          title={unreadOnly ? "Showing unread only" : "Showing all articles"}
+          className={`rounded-lg p-1.5 transition-colors hover:bg-card hover:text-ink ${
+            unreadOnly ? "text-accent" : "text-ink-3"
+          }`}
+        >
+          <Filter width={15} height={15} />
+        </button>
         <button
           type="button"
           onClick={onToggleSort}
