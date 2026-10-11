@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { articles, feeds } from "../../db/schema.ts";
 import type { Variables } from "../index.ts";
 
@@ -15,26 +15,23 @@ articlesRouter.get("/", async (c) => {
 
   const conditions = [];
   if (q) {
-    // Substring search on the trigram-indexed FTS table (works for any token
-    // length — Chinese words are often 2 chars, below MATCH's trigram floor).
-    // ESCAPE so % and _ in user input stay literal.
-    const likeGroups = q.split(/\s+/).map((token) => {
+    // ILIKE substring search directly on articles, backed by the pg_trgm GIN
+    // index (works for any token length — Chinese words are often 2 chars).
+    // Backslash is LIKE/ILIKE's default escape char in Postgres, so % and _
+    // in user input stay literal without an ESCAPE clause.
+    for (const token of q.split(/\s+/)) {
       const pattern = `%${token
         .replaceAll("\\", "\\\\")
         .replaceAll("%", "\\%")
         .replaceAll("_", "\\_")}%`;
-      return sql`(
-        title LIKE ${pattern} ESCAPE '\\'
-        OR summary LIKE ${pattern} ESCAPE '\\'
-        OR content LIKE ${pattern} ESCAPE '\\'
-      )`;
-    });
-    const ftsRows = await db.all<{ article_id: string }>(
-      sql`SELECT article_id FROM articles_fts WHERE ${sql.join(likeGroups, sql` AND `)}`,
-    );
-    const ids = ftsRows.map((row) => row.article_id);
-    if (ids.length === 0) return c.json([]);
-    conditions.push(inArray(articles.id, ids));
+      conditions.push(
+        or(
+          ilike(articles.title, pattern),
+          ilike(articles.summary, pattern),
+          ilike(articles.content, pattern),
+        ),
+      );
+    }
   }
   if (feedId) conditions.push(eq(articles.feedId, feedId));
   if (folderId) {
@@ -101,10 +98,9 @@ articlesRouter.post("/read-all", async (c) => {
   const result = await db
     .update(articles)
     .set({ read: 1 })
-    .where(feedId ? and(eq(articles.read, 0), eq(articles.feedId, feedId)) : eq(articles.read, 0))
-    .run();
+    .where(feedId ? and(eq(articles.read, 0), eq(articles.feedId, feedId)) : eq(articles.read, 0));
 
-  return c.json({ marked: result.rowsAffected });
+  return c.json({ marked: result.rowCount ?? 0 });
 });
 
 // PATCH /api/articles/:id

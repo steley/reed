@@ -35,7 +35,7 @@ export function createApp(dbOverride?: DB) {
   app.get("/api/health", async (c) => {
     try {
       const db = c.get("db") ?? getDb();
-      await db.run(sql`SELECT 1`);
+      await db.execute(sql`SELECT 1`);
       return c.json({ status: "ok", db: "connected" });
     } catch (err) {
       return c.json(

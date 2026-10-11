@@ -1,34 +1,20 @@
 {
-	"version": "7",
-	"dialect": "sqlite",
-	"entries": [
-		{
-			"idx": 0,
-			"version": "6",
-			"when": 1774665750022,
-			"tag": "0000_silly_rumiko_fujikawa",
-			"breakpoints": true
-		},
-		{
-			"idx": 1,
-			"version": "6",
-			"when": 1791675076850,
-			"tag": "0001_fixed_leo",
-			"breakpoints": true
-		},
-		{
-			"idx": 2,
-			"version": "6",
-			"when": 1791859200000,
-			"tag": "0002_fts5_search",
-			"breakpoints": true
-		},
-		{
-			"idx": 3,
-			"version": "6",
-			"when": 1791862800000,
-			"tag": "0003_fts5_trigram",
-			"breakpoints": true
-		}
-	]
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791690624547,
+      "tag": "0000_good_menace",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791690624548,
+      "tag": "0001_pg_trgm",
+      "breakpoints": true
+    }
+  ]
 }

@@ -1,12 +1,12 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { bigint, index, integer, pgTable, text } from "drizzle-orm/pg-core";
 
-export const folders = sqliteTable("folders", {
+export const folders = pgTable("folders", {
   id: text("id").primaryKey(),
   name: text("name").notNull().unique(),
-  createdAt: integer("created_at").notNull(),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
 });
 
-export const feeds = sqliteTable("feeds", {
+export const feeds = pgTable("feeds", {
   id: text("id").primaryKey(),
   url: text("url").notNull().unique(),
   title: text("title"),
@@ -14,11 +14,11 @@ export const feeds = sqliteTable("feeds", {
   description: text("description"),
   imageUrl: text("image_url"),
   folderId: text("folder_id").references(() => folders.id, { onDelete: "set null" }),
-  lastFetchedAt: integer("last_fetched_at"),
-  createdAt: integer("created_at").notNull(),
+  lastFetchedAt: bigint("last_fetched_at", { mode: "number" }),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
 });
 
-export const articles = sqliteTable(
+export const articles = pgTable(
   "articles",
   {
     id: text("id").primaryKey(),
@@ -29,9 +29,9 @@ export const articles = sqliteTable(
     title: text("title"),
     summary: text("summary"),
     content: text("content"),
-    publishedAt: integer("published_at"),
+    publishedAt: bigint("published_at", { mode: "number" }),
     read: integer("read").notNull().default(0),
-    createdAt: integer("created_at").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (table) => [
     index("idx_articles_feed_id").on(table.feedId),

@@ -2,7 +2,7 @@
   "name": "reed",
   "version": "0.0.1",
   "private": true,
-  "description": "Personal RSS reader on Vercel (Hono) + Turso + GitHub Actions",
+  "description": "Personal RSS reader on Vercel (Hono) + Neon PostgreSQL + GitHub Actions",
   "scripts": {
     "dev": "pnpm --filter @reed/worker dev",
     "build": "pnpm --filter @reed/app build",
@@ -29,12 +29,7 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
-    ],
-    "patchedDependencies": {
-      "@libsql/isomorphic-ws@0.1.5": "patches/@libsql__isomorphic-ws@0.1.5.patch",
-      "@libsql/hrana-client@0.9.0": "patches/@libsql__hrana-client@0.9.0.patch",
-      "drizzle-orm@0.41.0": "patches/drizzle-orm@0.41.0.patch"
-    }
+    ]
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.9",

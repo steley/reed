@@ -4,11 +4,11 @@ import { feeds, folders } from "../db/schema.ts";
 import { createTestDb } from "../lib/test-helpers.ts";
 import { createApp } from "./index.ts";
 
-let db: ReturnType<typeof createTestDb>;
+let db: Awaited<ReturnType<typeof createTestDb>>;
 let app: ReturnType<typeof createApp>;
 
-beforeEach(() => {
-  db = createTestDb();
+beforeEach(async (ctx) => {
+  db = await createTestDb(ctx);
   app = createApp(db);
 });
 

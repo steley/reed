@@ -1,6 +1,6 @@
 # Reed — Agent Guide
 
-Personal RSS reader built on Vercel (Hono API), Turso (libSQL/SQLite), and
+Personal RSS reader built on Vercel (Hono API), Neon (PostgreSQL), and
 GitHub Actions for scheduled feed refresh. This document is the authoritative
 reference for any agent or contributor working in this repository.
 Read it fully before making changes.
@@ -40,7 +40,7 @@ These rules are mandatory. Follow them on every task without exception.
 
 A self-hosted RSS reader with:
 - A REST API backend (Hono on Node) served from Vercel serverless functions
-- A Turso (libSQL/SQLite) database for feeds and articles, accessed via `@libsql/client` over HTTP
+- A Neon PostgreSQL database for feeds and articles, accessed via `@neondatabase/serverless` over HTTP (neon-http mode)
 - Hourly feed refresh via GitHub Actions (`schedule` cron)
 - A React frontend (Vite + Tailwind v4, hand-rolled components) served as static output by Vercel
 - A CLI tool for terminal access to the API (phase 3)
@@ -59,12 +59,12 @@ reed/
 ├── tsconfig.json             # Root: base TS config, extended by all packages
 ├── vercel.json               # Vercel build config + SPA fallback rewrites
 ├── api/                      # GENERATED serverless bundle (pnpm build:api) — do not edit
-├── .github/workflows/        # refresh.yml — hourly feed refresh into Turso
+├── .github/workflows/        # refresh.yml — hourly feed refresh into Neon
 ├── AGENTS.md                 # This file
 ├── WORKLOG.md                # Increment-by-increment build log (agent memory)
 └── packages/
     ├── types/                # @reed/types  — shared TS types
-    ├── worker/               # @reed/worker — Hono API + Turso + refresh scripts
+    ├── worker/               # @reed/worker — Hono API + Neon Postgres + refresh scripts
     ├── app/                  # @reed/app    — React frontend (phase 2)
     └── cli/                  # @reed/cli    — CLI tool (phase 3)
 ```
@@ -74,7 +74,7 @@ reed/
 | Package | Description |
 |---------|-------------|
 | `@reed/types` | Shared `Feed`, `Article`, `NewFeed`, `NewArticle` TypeScript interfaces. No runtime code — types only. Imported by worker, app, and cli. |
-| `@reed/worker` | Owns the REST API (Hono), Turso/libsql queries via Drizzle, RSS fetching/parsing, and the refresh scripts (`scripts/refresh.ts` for Actions, `scripts/dev.ts` for local dev). |
+| `@reed/worker` | Owns the REST API (Hono), Neon/Postgres queries via Drizzle, RSS fetching/parsing, and the refresh scripts (`scripts/refresh.ts` for Actions, `scripts/dev.ts` for local dev). |
 | `@reed/app` | React SPA built with Vite. Hand-rolled components + Tailwind v4. Built to `dist/` and served as static output by Vercel. |
 | `@reed/cli` | Node.js CLI binary. Makes HTTP calls to the deployed REST API. Phase 3 — not yet scaffolded. |
 
@@ -85,15 +85,15 @@ reed/
 | Layer | Technology | Why |
 |-------|-----------|-----|
 | Runtime | Vercel serverless functions (Node) | Deployed from the same repo; user's real-world testing shows Vercel + custom domain is faster from mainland China than Cloudflare |
-| Database | Turso (libSQL/SQLite) | Managed SQLite over HTTP (`@libsql/client`), works from Vercel + GitHub Actions, supports Drizzle |
-| ORM | Drizzle ORM + drizzle-kit | Type-safe queries, `turso` dialect for migrations; same sqlite-core schema as the old D1 setup |
+| Database | Neon (PostgreSQL) | Serverless Postgres over HTTP (`@neondatabase/serverless`, neon-http: one stateless HTTPS request per query — no sockets, no pooling), identical from Vercel + GitHub Actions + local dev |
+| ORM | Drizzle ORM + drizzle-kit | Type-safe queries, `postgresql` dialect for migrations |
 | HTTP router | Hono | Lightweight, typed routing; `app.request()` enables clean unit tests; `hono/vercel` adapter for the serverless entry |
 | RSS parsing | `fast-xml-parser` | Pure JS, no native deps, handles RSS 2.0 + Atom |
 | Markdown rendering | `marked` | Converts markdown content to HTML for feeds that provide markdown bodies |
 | Frontend | React 19 + Vite | Standard SPA setup |
 | UI components | Hand-rolled + Tailwind v4 | Reeder-style minimal UI; no component library (removed 2026-10-10) |
 | Scheduled refresh | GitHub Actions cron | Free for public/private repos, full Node runtime, no Vercel Pro needed for hourly frequency |
-| Testing | Vitest | Fast, native ESM, works in Node with in-memory libsql |
+| Testing | Vitest | Fast, native ESM; DB tests run against a throwaway Neon branch over neon-http |
 | Monorepo | pnpm workspaces | Strict dependency isolation, fast installs |
 | Linter | Biome | Fast Rust-based linter + formatter, consistent with vega repo, single config at root |
 | Language | TypeScript (strict) | `strict: true` + `noUncheckedIndexedAccess` throughout |
@@ -102,15 +102,17 @@ reed/
 
 ## Key Design Decisions
 
-### Turso over D1 (2026-10 migration)
-Migrated off Cloudflare Workers + D1 because the user's real-world testing showed
-Vercel + custom domain loads faster from mainland China than Cloudflare. Turso was
-chosen over Neon/Supabase because the schema is SQLite (zero Drizzle schema
-changes), reads/writes from a single-user app don't hit SQLite's single-writer
-ceiling, and the HTTP-based libsql client works identically from Vercel functions,
-GitHub Actions runners, and local dev (`file:` URLs). Database connection is
-configured via `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` env vars — never a
-platform binding — so the same code runs in every environment.
+### Neon over Turso (2026-10 migration)
+History: started on Cloudflare Workers + D1, moved to Turso (2026-10) because
+Vercel + custom domain loaded faster from mainland China than Cloudflare, then
+moved to Neon (2026-10-11) to grow on Postgres toward multi-user. The neon-http
+driver runs each query as a stateless HTTPS request to Neon's proxy — no
+connection pooling to manage on serverless — and works identically from Vercel
+functions, GitHub Actions runners, and local dev. Connection is configured via
+`DATABASE_URL` alone — never a platform binding — so the same code runs in every
+environment. This migration was cheap because the codebase has no transactions
+and no dialect-specific upserts (`refreshFeed()` does select-then-write); keep
+it that way unless you also change drivers.
 
 ### GitHub Actions over Vercel Cron
 Vercel Hobby only allows daily cron; Pro is needed for hourly. GitHub Actions
@@ -133,10 +135,11 @@ all non-`/api` paths to `/index.html` (SPA fallback).
 ### Pre-bundled API function (`api/index.js`)
 `api/index.js` is a GENERATED file — a self-contained CJS bundle of
 `packages/worker/src/vercel-entry.ts` (the Hono app adapted via `hono/vercel`'s
-`handle()`), built by `pnpm build:api` with esbuild. It is committed because
-Vercel's own bundling pipeline crashed at module load on CJS transitive deps of
-`@libsql/client` even with the pnpm patches in place (full diagnosis in
-WORKLOG).
+`handle()`), built by `pnpm build:api` with esbuild. It is committed so
+Vercel deploys the exact bundle that passed the local pre-commit checks
+(originally adopted after Vercel's own bundling pipeline crashed at module load
+on the old libsql CJS dependency tree — the Neon driver bundles cleanly, but
+the committed-bundle + freshness-check workflow is kept).
 - Never hand-edit it. Change `packages/worker`, run `pnpm build:api`, and
   commit the regenerated bundle.
 - The build is deterministic (no source change → byte-identical output), and
@@ -150,51 +153,41 @@ All packages import from here. Never define these types inline in worker or app 
 
 ### Drizzle migrations
 Schema changes go through `drizzle-kit generate` (produces SQL in `packages/worker/drizzle/`)
-then `drizzle-kit migrate` against Turso (`TURSO_*` env vars). Never manually
-edit generated migration files. Test databases (`test-helpers.ts`) and
-`scripts/local-db.ts` apply that same generated SQL via `src/db/ddl.ts` (a
-loader that concatenates all `drizzle/*.sql`) — the migrations are the only
+then `drizzle-kit migrate` against Neon (`DATABASE_URL`). Never manually
+edit generated migration files. Tests (`test-helpers.ts`) apply that same
+generated SQL via `src/db/ddl.ts` (a loader that concatenates all
+`drizzle/*.sql`); neon-http runs one statement per request, so the loader's
+output is split on `--> statement-breakpoint` — the migrations are the only
 place the DDL lives; never hand-write schema SQL elsewhere.
 
-Exception — features drizzle-kit cannot generate (e.g. `0002_fts5_search.sql`:
-FTS5 virtual table + sync triggers): hand-write the `.sql` in `drizzle/` and
+Exception — features drizzle-kit cannot generate (e.g. `0001_pg_trgm.sql`:
+`CREATE EXTENSION pg_trgm`): hand-write the `.sql` in `drizzle/` and
 append a matching entry to `drizzle/meta/_journal.json` (same shape as the
 generated ones, incremented `idx`), so `db:migrate` picks it up. `ddl.ts`
-already includes any `*.sql` it finds, so tests and local DBs get it for free.
+already includes any `*.sql` it finds, so tests get it for free.
 
-### Full-text search (FTS5)
-`articles_fts` is an FTS5 virtual table mirroring `articles` (title, summary,
-content) with the **trigram** tokenizer, kept in sync by AFTER
-INSERT/UPDATE/DELETE triggers — no code paths touch it except the search
-query, so refresh upserts, mark-read updates, and cascade deletes stay indexed
-automatically. Trigram (0003) replaced unicode61 (0002) because unicode61
-treats whole CJK sentences as one token — Chinese search returned nothing.
-
-`GET /api/articles?q=` does substring matching via `LIKE` on the fts table,
-not `MATCH`: trigram MATCH can't match tokens under 3 chars and most Chinese
-words are 2. `%`/`_`/`\` in the query are escaped; tokens AND together. LIKE
-on a trigram table uses the index for ≥3-char patterns and linear-scans
-shorter ones (fine at single-user scale). The route resolves matches to
-article ids via a raw `sql` query (`db.all`), then does the main select with
-the regular Drizzle builder so `q` composes with `feed_id`/`folder_id`/`unread`.
-Gotcha: libsql's `executeMultiple` can't parse backticks on FTS5 table
-options — write `tokenize = 'trigram'`, not `` `tokenize` = 'trigram' ``.
+### Search (pg_trgm ILIKE)
+The old SQLite setup mirrored `articles` into an FTS5 trigram virtual table
+with sync triggers; all of that machinery is gone on Postgres. `GET
+/api/articles?q=` now runs `ILIKE '%token%'` **directly on
+`articles.title/summary/content`**, backed by a multi-column GIN index
+(`idx_articles_search`, `gin_trgm_ops` — requires the `pg_trgm` extension,
+created by the hand-written `drizzle/0001_pg_trgm.sql`). Tokens AND together;
+`%`/`_`/`\` in the query are escaped — backslash is LIKE/ILIKE's default
+escape character in Postgres, so no `ESCAPE` clause is needed. ILIKE has no
+token-length floor (the old trigram MATCH couldn't match under 3 chars; most
+Chinese words are 2), and the search composes with `feed_id`/`folder_id`/
+`unread` in a single query — no id round-trip through a helper table.
 
 Search highlighting is client-side (`highlightParts()` in app `lib/display.ts`,
 `<mark>` rendered by `ArticleList`): the server decides what matched, the
-client only paints the query tokens in title + summary. FTS5's `snippet()`
-auxiliary functions don't work with LIKE queries, which is why highlighting
-isn't server-side.
+client only paints the query tokens in title + summary.
 
-### Dependency patches (`patches/`)
-pnpm `patchedDependencies` in the root `package.json` carries three
-version-exact patches, all serving the Vercel serverless runtime (upstream had
-no fix as of `@libsql/client` 0.18): `@libsql/isomorphic-ws` and
-`@libsql/hrana-client` swap CJS `ws`/`cross-fetch` imports for Node's global
-`fetch`/`WebSocket`; `drizzle-orm` makes the libsql driver import
-`@libsql/client/web`. Patch pins include exact versions — bumping any of these
-packages means updating the pins and re-verifying the patches. See WORKLOG for
-the full diagnosis.
+### No dependency patches
+The pnpm `patches/` directory was removed with the Turso→Neon migration — all
+three patches existed to make `@libsql/client`'s CJS dependency tree survive
+the Vercel serverless bundle. `@neondatabase/serverless` needs none. Don't
+reintroduce patches without a diagnosed, upstream-unfixable reason.
 
 ---
 
@@ -216,7 +209,7 @@ the full diagnosis.
 | `site_url` | `text` | From feed `<link>` |
 | `description` | `text` | From feed `<description>` / `<subtitle>` |
 | `image_url` | `text` | From feed `<image>` or `<itunes:image>` |
-| `folder_id` | `text` FK → `folders.id` ON DELETE SET NULL | `NULL` = uncategorized. Folder delete nulls it explicitly in the route (libsql does not guarantee the FK pragma is on in every environment) |
+| `folder_id` | `text` FK → `folders.id` ON DELETE SET NULL | `NULL` = uncategorized. Postgres enforces the FK, so folder delete relies on it |
 | `last_fetched_at` | `integer` | Unix ms, updated on each successful refresh |
 | `created_at` | `integer` | Unix ms, set on insert |
 
@@ -237,6 +230,12 @@ the full diagnosis.
 - `idx_articles_feed_id` on `articles(feed_id)`
 - `idx_articles_read` on `articles(read)`
 - `idx_articles_published_at` on `articles(published_at DESC)`
+- `idx_articles_search` on `articles` USING gin (`title`, `summary`, `content` with `gin_trgm_ops`) — backs ILIKE search
+
+Column types: timestamp columns are `bigint` (unix ms exceeds int4's range);
+`read` stays `integer` 0/1 so `@reed/types` and the frontend don't change.
+All timestamps remain Unix milliseconds — the convention survives the engine
+swap, only the column type is wider.
 
 ---
 
@@ -255,7 +254,7 @@ Base path: `/api`
 | `POST` | `/api/folders` | Create folder `{ name: string }` → `201`; duplicate name → `409` |
 | `PATCH` | `/api/folders/:id` | Rename folder `{ name: string }` → `200` |
 | `DELETE` | `/api/folders/:id` | Delete folder; member feeds become uncategorized (not deleted) → `204` |
-| `GET` | `/api/articles` | List articles, **without the `content` column** (payload leanness — see Frontend Conventions). Query params: `feed_id`, `folder_id`, `unread=true`, `q` (FTS5 full-text search over title/summary/content) |
+| `GET` | `/api/articles` | List articles, **without the `content` column** (payload leanness — see Frontend Conventions). Query params: `feed_id`, `folder_id`, `unread=true`, `q` (case-insensitive substring search over title/summary/content) |
 | `GET` | `/api/articles/:id` | Full article including `content`; 404 if unknown. The reader fetches this when an article is opened |
 | `PATCH` | `/api/articles/:id` | Update article `{ read: boolean }` → `200` |
 | `POST` | `/api/articles/read-all` | Mark all unread articles read; `{ feedId?: string }` scopes to one feed → `200 { marked }` |
@@ -272,7 +271,7 @@ All error responses: `{ error: string }` with appropriate HTTP status.
 `workflow_dispatch`; off the top of the hour because GitHub delays/drops
 on-the-hour crons under load). It checks out the repo, installs pnpm deps, and runs
 `pnpm --filter @reed/worker refresh` (→ `scripts/refresh.ts`), which
-calls `runCron()` — `refreshFeed()` for every feed in Turso, using
+calls `runCron()` — `refreshFeed()` for every feed in Neon, using
 `Promise.allSettled` so one failing feed does not abort others. `runCron()`
 returns the failures; the script logs each one to stderr and sets
 `process.exitCode = 1` when any feed failed, so a broken feed turns the
@@ -297,7 +296,7 @@ feeds carry the same article URL, the feed that stored it first keeps
 ownership; later refreshes of other feeds **skip** that URL (no overwrite, no
 count as added/updated). Never widen the upsert's where-clause back to URL-only.
 
-Required repository secrets: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`.
+Required repository secret: `DATABASE_URL`.
 
 ## CI (GitHub Actions)
 
@@ -310,8 +309,8 @@ fast path; CI is the backstop for commits that bypass it.
 
 | Variable | Used by | Values |
 |----------|---------|--------|
-| `TURSO_DATABASE_URL` | API (`src/db/client.ts`), all scripts, drizzle-kit | `libsql://...` (Turso) or `file:local.db` (local dev) |
-| `TURSO_AUTH_TOKEN` | Same, when URL is remote | Turso auth token (not needed for `file:` URLs) |
+| `DATABASE_URL` | API (`src/db/client.ts`), all scripts, drizzle-kit, Actions | `postgresql://...` Neon connection string (production branch; the password is embedded) |
+| `TEST_DATABASE_URL` | Vitest (`test-helpers.ts`) | Throwaway Neon **branch** — tests TRUNCATE all tables, so never point it at a database you use. Unset → DB tests skip cleanly |
 
 In Vercel these are project environment variables; in GitHub Actions they are
 repository secrets; locally they can be exported in the shell or set per-command.
@@ -331,7 +330,7 @@ repository secrets; locally they can be exported in the shell or set per-command
 - **OPML import/export:** `···` button in the sidebar wordmark row opens a menu (Import OPML… / Export OPML), rendered outside the `<aside>` like the folder context menu. Export is a plain `<a href="/api/opml">` — the API's `Content-Disposition` triggers the download, no fetch wrapper. Import goes through `ImportOpmlDialog.tsx` (`file.text()` → POST `/api/opml`) and App reloads feeds+folders afterwards; the dialog shows result counts and a Done button. Import semantics are server-side (see API table): additive only, URL-dedupe for feeds, name-dedupe for folders. Parsing/generation lives in `worker/src/lib/opml.ts` on the existing `fast-xml-parser` dep — no OPML library.
 - **Article content rendering:** `marked` converts markdown → HTML, then `sanitizeArticleHtml()` (`lib/sanitize.ts`, DOMPurify) sanitizes it before the single `dangerouslySetInnerHTML` sink in `ArticleReader` — feed content is untrusted third-party input (audit AUDIT-001). Never add a second innerHTML sink without going through that helper. The sanitizer's regression tests live in `lib/sanitize.test.ts` (vitest + **jsdom** — happy-dom's DOM misparses template content and breaks DOMPurify).
 - **Sort order:** client-side by `publishedAt ?? createdAt`, toggleable newest/oldest. Default newest-first.
-- **Search:** a search input under the list header (`searchQuery` state in App, input in `ArticleList`) — every keystroke refetches `articlesApi.list({ feedId, q })`, so search composes with the selected feed (empty query = normal view). No debounce: single-user, one cheap query per keystroke. The loading effect aborts the previous request (`AbortController`) so out-of-order responses can't show a stale list. Matches are highlighted client-side in the list (see FTS section under Key Design Decisions).
+- **Search:** a search input under the list header (`searchQuery` state in App, input in `ArticleList`) — every keystroke refetches `articlesApi.list({ feedId, q })`, so search composes with the selected feed (empty query = normal view). No debounce: single-user, one cheap query per keystroke. The loading effect aborts the previous request (`AbortController`) so out-of-order responses can't show a stale list. Matches are highlighted client-side in the list (see Search section under Key Design Decisions).
 - **Mark all read:** double-check button in the list header (only rendered while the current view has unread) → `POST /api/articles/read-all` scoped to the selected feed, or global when "All articles" is selected; App reloads the view list + `unreadList` afterwards. No confirm — unread state is the only thing at risk.
 - **Unread counts:** sidebar badges derive from a dedicated full unread fetch (`articlesApi.list({ unread: true })` → `unreadList` in App), never from the view-scoped `articles` state — that list is filtered by the current feed selection, so counts derived from it would vanish the moment a feed is selected. `handleMarkRead` keeps `unreadList` in sync for immediate feedback.
 - **Auto-mark-read:** selecting an article marks it read automatically.
@@ -369,6 +368,8 @@ pnpm type-check  # tsc --noEmit across all packages
 
 Tests are run on every commit as a guardrail — particularly important for agent-authored
 commits. `--passWithNoTests` is set so the hook doesn't fail before any test files exist.
+DB tests read `TEST_DATABASE_URL` (a throwaway Neon branch); when it is unset the
+database tests skip, so the hook still passes offline.
 
 ---
 
@@ -379,11 +380,9 @@ commits. `--passWithNoTests` is set so the hook doesn't fail before any test fil
 pnpm install
 
 # Run API in local dev mode on :8787 (Vite proxies /api/* here)
-# Needs TURSO_DATABASE_URL (use file:local.db for offline dev)
+# Needs DATABASE_URL (a Neon connection string — local dev hits Neon directly)
+export DATABASE_URL=postgresql://...
 pnpm dev
-
-# Initialise a local SQLite file DB with the schema (one-time)
-TURSO_DATABASE_URL=file:local.db pnpm --filter @reed/worker db:local
 
 # Run all tests
 pnpm test
@@ -403,17 +402,14 @@ pnpm deploy
 # Generate Drizzle migration from schema changes
 pnpm --filter @reed/worker db:generate
 
-# Apply migrations to Turso (reads TURSO_* env vars)
+# Apply migrations to Neon (reads DATABASE_URL)
 pnpm --filter @reed/worker db:migrate
 
 # Trigger the hourly refresh manually (same code the Actions workflow runs)
 pnpm --filter @reed/worker refresh
 
-# Open Drizzle Studio (DB browser, uses TURSO_* env vars)
+# Open Drizzle Studio (DB browser, uses DATABASE_URL)
 pnpm --filter @reed/worker db:studio
-
-# One-time D1 → Turso data migration helper (kept until data is migrated)
-pnpm --filter @reed/worker db:export-d1   # then: turso db shell <db> < dump.sql
 ```
 
 ---
@@ -422,7 +418,7 @@ pnpm --filter @reed/worker db:export-d1   # then: turso db shell <db> < dump.sql
 
 - **Hosting:** Vercel (one project: static SPA + `api/` serverless function)
 - **First-time setup:** import the repo in Vercel (framework: Other — `vercel.json`
-  drives the build), then set `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` env vars
+  drives the build), then set the `DATABASE_URL` env var
   and bind a custom domain
 - **Deploys:** automatic on push to the production branch, or `pnpm deploy` (vercel CLI)
 - **Local dev:** `pnpm dev` (Node API on :8787 + `pnpm --filter @reed/app dev`)
@@ -431,7 +427,7 @@ pnpm --filter @reed/worker db:export-d1   # then: turso db shell <db> < dump.sql
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| 1 | Complete | API layer — Hono, Turso, REST endpoints, GH Actions refresh, Vitest |
+| 1 | Complete | API layer — Hono, Neon Postgres, REST endpoints, GH Actions refresh, Vitest |
 | 2 | Complete | Frontend — React, Vite, Tailwind v4 (Reeder-style rewrite 2026-10-10), static hosting on Vercel |
 | 3 | Deferred | Auth, CLI tool (FTS5 search + OPML import/export shipped 2026-10-11) |
 

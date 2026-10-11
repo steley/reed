@@ -23,11 +23,11 @@ const RSS_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </channel>
 </rss>`;
 
-let db: ReturnType<typeof createTestDb>;
+let db: Awaited<ReturnType<typeof createTestDb>>;
 let app: ReturnType<typeof createApp>;
 
-beforeEach(() => {
-  db = createTestDb();
+beforeEach(async (ctx) => {
+  db = await createTestDb(ctx);
   app = createApp(db);
   vi.stubGlobal("fetch", vi.fn());
 });

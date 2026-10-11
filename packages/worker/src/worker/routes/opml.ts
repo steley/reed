@@ -55,10 +55,10 @@ opmlRouter.post("/", async (c) => {
   let foldersCreated = 0;
   const feedsSkipped = data.feeds.filter((item) => existingUrls.has(item.url)).length;
 
-  // ponytail: sequential inserts, no transaction — drizzle's libsql transaction
-  // opens a fresh connection on file:/memory: DBs (fails in tests/local dev), and
-  // single-user scale accepts the mid-import partial-failure ceiling (AUDIT-006).
-  // Upgrade path: batch via the raw libsql client when it matters.
+  // ponytail: sequential inserts, no transaction — neon-http has no
+  // transactions, and single-user scale accepts the mid-import
+  // partial-failure ceiling (AUDIT-006). Upgrade path: switch to the
+  // websocket/TCP Neon driver or batch when it matters.
   const now = Date.now();
   for (const item of data.feeds) {
     if (existingUrls.has(item.url)) continue;

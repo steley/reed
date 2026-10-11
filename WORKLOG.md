@@ -1703,3 +1703,102 @@ list (or clears, when a switch misses) before fetching.
 - `if (feedChanged || cached) setArticles(cached ?? [])` covers both paths in
   one line: switch-miss → `[]` + spinner; hit → cached, no spinner; search
   keystroke (no hit by design) → no-op, list stays visible.
+
+---
+
+## Increment — Database swap: Turso/libSQL → Neon PostgreSQL
+**Date:** 2026-10-11
+**Status:** Code complete; pending `DATABASE_URL` in Vercel/GitHub and first deploy
+
+### What was built
+Full engine swap from Turso (libSQL/SQLite) to Neon (PostgreSQL), driven by the
+multi-user roadmap. Historical data is NOT migrated — the Neon database starts
+empty; feeds come back via OPML import + hourly cron (article history and read
+state are intentionally dropped, per user decision).
+
+- `src/db/client.ts` — `@libsql/client/web` → `@neondatabase/serverless`
+  (neon-http mode) + `drizzle-orm/neon-http`. One env var, `DATABASE_URL` (the
+  Neon connection string embeds the password; `TURSO_AUTH_TOKEN` is gone).
+- `src/db/schema.ts` — `sqlite-core` → `pg-core`. Timestamp columns `integer` →
+  `bigint({ mode: "number" })` (unix ms overflows int4); `read` stays integer
+  0/1 so `@reed/types`, the API contract, and the frontend are untouched.
+- `drizzle/` — four SQLite migrations deleted, new PG baseline `0000`
+  generated + hand-written `0001_pg_trgm.sql` (CREATE EXTENSION, per the
+  documented hand-written-migration exception).
+- Search: FTS5 virtual table + 3 sync triggers → `ILIKE '%token%'` directly on
+  `articles.title/summary/content`, backed by a multi-column GIN
+  (`gin_trgm_ops`) index declared in schema.ts. Backslash escaping kept; PG
+  uses backslash as LIKE's default escape char, so no ESCAPE clause. One query
+  instead of the old fts-id-round-trip + main-select.
+- `test-helpers.ts` — in-memory libsql → neon-http against `TEST_DATABASE_URL`,
+  schema applied by splitting `ddl.ts` output on `--> statement-breakpoint`
+  (neon-http is one statement per request), TRUNCATE before every test.
+  Unset var → suites skip via `ctx.skip()`, so pre-commit still passes offline.
+- 6 test files updated for the now-async `createTestDb(ctx)`.
+- `scripts/dev.ts` simplified (no file:/authToken branches); `local-db.ts` and
+  `db:local` deleted (no more `file:` databases anywhere).
+- Root `pnpm.patchedDependencies` and `patches/` removed — all three patches
+  existed solely to keep `@libsql/client`'s CJS tree alive on Vercel; the Neon
+  driver needs none. `api/index.js` regenerated (574.9 KB).
+- refresh.yml: `TURSO_*` secrets → `DATABASE_URL`. README/.env.example updated.
+
+### Decisions made
+- **neon-http over websocket/TCP drivers:** no transactions exist in the
+  codebase (OPML import deliberately inserts sequentially — AUDIT-006), so
+  neon-http's no-transaction limitation costs nothing; stateless HTTPS also
+  means zero pooling config on Vercel. Revisit only if a transaction is ever
+  needed — that's the moment to move to the websocket driver, not before.
+- **ILIKE + pg_trgm over PG tsvector:** tsvector/websearch would change match
+  semantics (tokenization, ranking) from what users already see; ILIKE keeps
+  today's substring behavior exactly (including 2-char Chinese words, which
+  defeated trigram MATCH on SQLite). The GIN trigram index keeps it indexed.
+- **`read` stays 0/1 integer, not boolean:** the column type is the only place
+  the convention exists — types, routes, and app code keep their values.
+- **Explicit article delete kept in `DELETE /api/feeds/:id`:** PG would cascade
+  reliably, but the statement is one line and the behavior is identical.
+- **Folder delete now relies on ON DELETE SET NULL:** the old explicit
+  null-set existed because libsql didn't guarantee the foreign_keys pragma;
+  Postgres enforces FKs, so the workaround (and its comment) went away.
+- **Tests skip (not fail) without `TEST_DATABASE_URL`:** tests TRUNCATE all
+  tables — pointing them at a used database would wipe it. The skip keeps
+  pre-commit green offline; the var should only ever name a throwaway branch.
+- **vitest `fileParallelism: false`:** parallel test files sharing one schema
+  would TRUNCATE each other's fixtures.
+
+### Options considered and discarded
+- **Migrating historical data:** offered a one-off copy script; user chose a
+  fresh start (OPML re-import). No `migrate-turso.ts` was written.
+- **Local Docker Postgres for tests/dev:** rejected — another moving part on
+  the user's machine; neon-http reaches Neon identically from anywhere.
+- **postgres.js (TCP) driver:** fine on Vercel but adds pool sizing/timeout
+  concerns that neon-http simply doesn't have.
+
+### Gotchas
+- `neon()`'s call signature is a tagged template; raw one-off DDL strings go
+  through `http.query(statement)`, not `http(statement)`.
+- neon-http returns Postgres `rowCount`, not libsql `rowsAffected`; drizzle pg
+  update builders are awaited directly (no `.run()`).
+- Timestamps MUST be bigint in pg-core — `integer` silently truncates nothing
+  at rest but overflows on unix-ms values.
+- libsql packages linger in `.pnpm` from drizzle's peer-resolution history;
+  the worker's own dependency graph is clean.
+
+### Follow-ups (user actions)
+1. Set `DATABASE_URL` in Vercel env vars; replace `TURSO_*` GitHub secrets
+   with `DATABASE_URL`.
+2. `pnpm --filter @reed/worker db:migrate` against Neon.
+3. After deploy: sidebar `···` → Import OPML with the previously exported
+   `reed.opml`.
+4. For local test runs: `TEST_DATABASE_URL` → a throwaway Neon branch.
+### Fix en route: migration ordering
+First `db:migrate` failed: the generated 0000 baseline created the GIN
+trigram index, but `pg_trgm` (the extension it needs) lived in 0001 —
+drizzle-kit applies journal order, extension came last. Fix: the index moved
+out of schema.ts entirely and into the hand-written `0001_pg_trgm.sql`
+alongside `CREATE EXTENSION` (keeps drizzle-kit diffs clean too — expression
+indexes in schema.ts invite spurious regenerates). Neon DB was still empty
+(drizzle-kit rolled the failed migration back transactionally), so the re-run
+was: drop the bookkeeping `drizzle` schema, regenerate the baseline, migrate.
+Verified end-to-end against real Neon: tables + extension + 4 article indexes
+present, health/folder CRUD/ILIKE search/read-all all correct via the local
+dev server.

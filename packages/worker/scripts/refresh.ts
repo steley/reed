@@ -1,6 +1,6 @@
 /**
- * One-shot feed refresh for GitHub Actions (or local runs against Turso).
- * Reads TURSO_DATABASE_URL / TURSO_AUTH_TOKEN from the environment.
+ * One-shot feed refresh for GitHub Actions (or local runs against Neon).
+ * Reads DATABASE_URL from the environment.
  * Exits non-zero when any feed fails, so the Actions run goes red.
  */
 import { getDb } from "../src/db/client.ts";

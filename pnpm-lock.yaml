@@ -4,17 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-patchedDependencies:
-  '@libsql/hrana-client@0.9.0':
-    hash: p5hajjofxq2oj7px42vnjaj7cu
-    path: patches/@libsql__hrana-client@0.9.0.patch
-  '@libsql/isomorphic-ws@0.1.5':
-    hash: 5fqvq3v2mytthypou7kkzyrque
-    path: patches/@libsql__isomorphic-ws@0.1.5.patch
-  drizzle-orm@0.41.0:
-    hash: qofbqifwcy4ocxbfnqds7hyske
-    path: patches/drizzle-orm@0.41.0.patch
-
 importers:
 
   .:
@@ -89,15 +78,15 @@ importers:
 
   packages/worker:
     dependencies:
-      '@libsql/client':
-        specifier: ^0.17.2
-        version: 0.17.2
+      '@neondatabase/serverless':
+        specifier: ^1.0.0
+        version: 1.2.0
       '@reed/types':
         specifier: workspace:*
         version: link:../types
       drizzle-orm:
         specifier: ^0.41.0
-        version: 0.41.0(patch_hash=qofbqifwcy4ocxbfnqds7hyske)(@cloudflare/workers-types@4.20260317.1)(@libsql/client@0.17.2)(gel@2.2.0)
+        version: 0.41.0(@cloudflare/workers-types@4.20260317.1)(@libsql/client@0.17.2)(@neondatabase/serverless@1.2.0)(gel@2.2.0)
       fast-xml-parser:
         specifier: ^4.5.3
         version: 4.5.5
@@ -1000,6 +989,10 @@ packages:
   '@neon-rs/load@0.0.4':
     resolution: {integrity: sha512-kTPhdZyTQxB+2wpiRcFWrDcejc4JI6tkPuS7UZCG4l6Zvc5kU/gGQ/ozvHTh1XR5tS+UlfAfGuPajjzQjCiHCw==}
 
+  '@neondatabase/serverless@1.2.0':
+    resolution: {integrity: sha512-tnaqgixUengZQNd9ZrS3ytQfamJzLKY8QxgqWQTNHHtB+KrFQWk77JTbbpg4RD+J3qE4eO2lVytvGDX5Kj6FdQ==}
+    engines: {node: '>=19.0.0'}
+
   '@petamoriken/float16@3.9.3':
     resolution: {integrity: sha512-8awtpHXCx/bNpFt4mt2xdkgtgVvKqty8VbjHI/WWWQuEw+KLzFot3f4+LkQY9YmOtq7A5GdOnqoIC8Pdygjk2g==}
 
@@ -1682,7 +1675,6 @@ packages:
 
   libsql@0.5.29:
     resolution: {integrity: sha512-8lMP8iMgiBzzoNbAPQ59qdVcj6UaE/Vnm+fiwX4doX4Narook0a4GPKWBEv+CR8a1OwbfkgL18uBfBjWdF0Fzg==}
-    cpu: [x64, arm64, wasm32, arm]
     os: [darwin, linux, win32]
 
   lightningcss-android-arm64@1.32.0:
@@ -2719,7 +2711,7 @@ snapshots:
   '@libsql/client@0.17.2':
     dependencies:
       '@libsql/core': 0.17.2
-      '@libsql/hrana-client': 0.9.0(patch_hash=p5hajjofxq2oj7px42vnjaj7cu)
+      '@libsql/hrana-client': 0.9.0
       js-base64: 3.7.8
       libsql: 0.5.29
       promise-limit: 2.7.0
@@ -2727,10 +2719,12 @@ snapshots:
       - bufferutil
       - encoding
       - utf-8-validate
+    optional: true
 
   '@libsql/core@0.17.2':
     dependencies:
       js-base64: 3.7.8
+    optional: true
 
   '@libsql/darwin-arm64@0.5.29':
     optional: true
@@ -2738,9 +2732,9 @@ snapshots:
   '@libsql/darwin-x64@0.5.29':
     optional: true
 
-  '@libsql/hrana-client@0.9.0(patch_hash=p5hajjofxq2oj7px42vnjaj7cu)':
+  '@libsql/hrana-client@0.9.0':
     dependencies:
-      '@libsql/isomorphic-ws': 0.1.5(patch_hash=5fqvq3v2mytthypou7kkzyrque)
+      '@libsql/isomorphic-ws': 0.1.5
       cross-fetch: 4.1.0
       js-base64: 3.7.8
       node-fetch: 3.3.2
@@ -2748,14 +2742,16 @@ snapshots:
       - bufferutil
       - encoding
       - utf-8-validate
+    optional: true
 
-  '@libsql/isomorphic-ws@0.1.5(patch_hash=5fqvq3v2mytthypou7kkzyrque)':
+  '@libsql/isomorphic-ws@0.1.5':
     dependencies:
       '@types/ws': 8.18.1
       ws: 8.18.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+    optional: true
 
   '@libsql/linux-arm-gnueabihf@0.5.29':
     optional: true
@@ -2778,7 +2774,10 @@ snapshots:
   '@libsql/win32-x64-msvc@0.5.29':
     optional: true
 
-  '@neon-rs/load@0.0.4': {}
+  '@neon-rs/load@0.0.4':
+    optional: true
+
+  '@neondatabase/serverless@1.2.0': {}
 
   '@petamoriken/float16@3.9.3': {}
 
@@ -2983,6 +2982,7 @@ snapshots:
   '@types/ws@8.18.1':
     dependencies:
       '@types/node': 22.20.5
+    optional: true
 
   '@vitejs/plugin-react@4.7.0(vite@6.4.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.23.15)(yaml@2.8.3))':
     dependencies:
@@ -3111,6 +3111,7 @@ snapshots:
       node-fetch: 2.7.0
     transitivePeerDependencies:
       - encoding
+    optional: true
 
   css-tree@3.2.1:
     dependencies:
@@ -3119,7 +3120,8 @@ snapshots:
 
   csstype@3.2.3: {}
 
-  data-uri-to-buffer@4.0.1: {}
+  data-uri-to-buffer@4.0.1:
+    optional: true
 
   data-urls@8.0.0:
     dependencies:
@@ -3136,7 +3138,8 @@ snapshots:
 
   deep-eql@5.0.2: {}
 
-  detect-libc@2.0.2: {}
+  detect-libc@2.0.2:
+    optional: true
 
   detect-libc@2.1.2: {}
 
@@ -3154,10 +3157,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.41.0(patch_hash=qofbqifwcy4ocxbfnqds7hyske)(@cloudflare/workers-types@4.20260317.1)(@libsql/client@0.17.2)(gel@2.2.0):
+  drizzle-orm@0.41.0(@cloudflare/workers-types@4.20260317.1)(@libsql/client@0.17.2)(@neondatabase/serverless@1.2.0)(gel@2.2.0):
     optionalDependencies:
       '@cloudflare/workers-types': 4.20260317.1
       '@libsql/client': 0.17.2
+      '@neondatabase/serverless': 1.2.0
       gel: 2.2.0
 
   electron-to-chromium@1.5.328: {}
@@ -3318,10 +3322,12 @@ snapshots:
     dependencies:
       node-domexception: 1.0.0
       web-streams-polyfill: 3.3.3
+    optional: true
 
   formdata-polyfill@4.0.10:
     dependencies:
       fetch-blob: 3.2.0
+    optional: true
 
   fsevents@2.3.3:
     optional: true
@@ -3381,7 +3387,8 @@ snapshots:
 
   jiti@2.6.1: {}
 
-  js-base64@3.7.8: {}
+  js-base64@3.7.8:
+    optional: true
 
   js-tokens@4.0.0: {}
 
@@ -3430,6 +3437,7 @@ snapshots:
       '@libsql/linux-x64-gnu': 0.5.29
       '@libsql/linux-x64-musl': 0.5.29
       '@libsql/win32-x64-msvc': 0.5.29
+    optional: true
 
   lightningcss-android-arm64@1.32.0:
     optional: true
@@ -3528,17 +3536,20 @@ snapshots:
 
   nanoid@3.3.11: {}
 
-  node-domexception@1.0.0: {}
+  node-domexception@1.0.0:
+    optional: true
 
   node-fetch@2.7.0:
     dependencies:
       whatwg-url: 5.0.0
+    optional: true
 
   node-fetch@3.3.2:
     dependencies:
       data-uri-to-buffer: 4.0.1
       fetch-blob: 3.2.0
       formdata-polyfill: 4.0.10
+    optional: true
 
   node-releases@2.0.36: {}
 
@@ -3564,7 +3575,8 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  promise-limit@2.7.0: {}
+  promise-limit@2.7.0:
+    optional: true
 
   punycode@2.3.1: {}
 
@@ -3712,7 +3724,8 @@ snapshots:
     dependencies:
       tldts: 7.4.18
 
-  tr46@0.0.3: {}
+  tr46@0.0.3:
+    optional: true
 
   tr46@7.0.0:
     dependencies:
@@ -3903,9 +3916,11 @@ snapshots:
     dependencies:
       xml-name-validator: 5.0.0
 
-  web-streams-polyfill@3.3.3: {}
+  web-streams-polyfill@3.3.3:
+    optional: true
 
-  webidl-conversions@3.0.1: {}
+  webidl-conversions@3.0.1:
+    optional: true
 
   webidl-conversions@8.0.1: {}
 
@@ -3926,6 +3941,7 @@ snapshots:
     dependencies:
       tr46: 0.0.3
       webidl-conversions: 3.0.1
+    optional: true
 
   which@4.0.0:
     dependencies:
@@ -3942,7 +3958,8 @@ snapshots:
       string-width: 7.2.0
       strip-ansi: 7.2.0
 
-  ws@8.18.0: {}
+  ws@8.18.0:
+    optional: true
 
   ws@8.22.0:
     optional: true

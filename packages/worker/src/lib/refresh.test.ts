@@ -58,12 +58,12 @@ const INVALID_XML = `not xml`;
 // Setup
 // ---------------------------------------------------------------------------
 
-let db: ReturnType<typeof createTestDb>;
+let db: Awaited<ReturnType<typeof createTestDb>>;
 const FEED_ID = "feed-test-id";
 const FEED_URL = "https://blog.example.com/feed.xml";
 
-beforeEach(async () => {
-  db = createTestDb();
+beforeEach(async (ctx) => {
+  db = await createTestDb(ctx);
   // Insert a base feed record
   await db.insert(feeds).values({
     id: FEED_ID,

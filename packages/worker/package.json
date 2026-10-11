@@ -2,7 +2,7 @@
   "name": "@reed/worker",
   "version": "0.0.1",
   "private": true,
-  "description": "REST API (Hono) + Turso/libsql database + cron refresh scripts",
+  "description": "REST API (Hono) + Neon PostgreSQL database + cron refresh scripts",
   "type": "module",
   "scripts": {
     "dev": "tsx scripts/dev.ts",
@@ -12,11 +12,10 @@
     "test:run": "vitest run --passWithNoTests",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio",
-    "db:local": "tsx scripts/local-db.ts"
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@libsql/client": "^0.17.2",
+    "@neondatabase/serverless": "^1.0.0",
     "@reed/types": "workspace:*",
     "drizzle-orm": "^0.41.0",
     "fast-xml-parser": "^4.5.3",

@@ -74,9 +74,8 @@ feedsRouter.delete("/:id", async (c) => {
     return c.json({ error: "Feed not found" }, 404);
   }
 
-  // Delete articles explicitly — never rely on the FK's ON DELETE cascade,
-  // which requires the foreign_keys pragma and is not guaranteed in every
-  // libsql environment (same reasoning as the folder-delete route).
+  // Postgres enforces the FK's ON DELETE cascade, so articles go with the
+  // feed; the explicit delete is belt-and-braces for cascade misconfiguration.
   await db.delete(articles).where(eq(articles.feedId, id));
   await db.delete(feeds).where(eq(feeds.id, id));
   return new Response(null, { status: 204 });

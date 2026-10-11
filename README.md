@@ -4,7 +4,7 @@
   <img src="packages/app/public/logo.svg" width="72" alt="Reed logo" />
 </p>
 
-A personal RSS reader built on Vercel (Hono), Turso (libSQL/SQLite), and GitHub Actions — static assets and API in one deployment, scheduled refresh in CI.
+A personal RSS reader built on Vercel (Hono), Neon (PostgreSQL), and GitHub Actions — static assets and API in one deployment, scheduled refresh in CI.
 
 ![Reed — homepage](docs/screenshot.png)
 
@@ -14,7 +14,7 @@ A personal RSS reader built on Vercel (Hono), Turso (libSQL/SQLite), and GitHub 
 
 - Add RSS 2.0 and Atom feeds by URL
 - Hourly background refresh via GitHub Actions; manual refresh-all or per-feed
-- Full-text search across article titles and bodies (SQLite FTS5)
+- Full-text search across article titles and bodies (Postgres pg_trgm)
 - Read/unread tracking, auto-mark-read on open; mark all as read per feed or globally
 - Sort articles newest or oldest first
 - Markdown and HTML article content rendering
@@ -30,7 +30,7 @@ A personal RSS reader built on Vercel (Hono), Turso (libSQL/SQLite), and GitHub 
 | Layer | Technology |
 |-------|-----------|
 | Runtime | Vercel serverless functions (Node) |
-| Database | Turso (libSQL/SQLite) |
+| Database | Neon (PostgreSQL, HTTP driver) |
 | Scheduled refresh | GitHub Actions cron |
 | ORM | Drizzle ORM + drizzle-kit |
 | HTTP router | Hono |
@@ -51,7 +51,7 @@ reed/
 ├── .github/        # workflows/refresh.yml — hourly feed refresh
 ├── packages/
 │   ├── types/      # @reed/types  — shared TypeScript types
-│   ├── worker/     # @reed/worker — REST API + Turso + refresh scripts
+│   ├── worker/     # @reed/worker — REST API + Neon Postgres + refresh scripts
 │   └── app/        # @reed/app    — React SPA
 ├── vercel.json     # Build config + SPA fallback
 ├── AGENTS.md       # Architecture reference for agents and contributors
@@ -82,11 +82,9 @@ All responses are JSON. Errors return `{ error: string }`.
 # Install dependencies
 pnpm install
 
-# Initialise a local SQLite file DB with the schema (one-time)
-TURSO_DATABASE_URL=file:local.db pnpm --filter @reed/worker db:local
-
-# Run the API locally on :8787
-TURSO_DATABASE_URL=file:local.db pnpm dev
+# Run the API locally on :8787 (connects straight to Neon)
+export DATABASE_URL=postgresql://...
+pnpm dev
 
 # Run the frontend dev server (proxies /api/* to :8787)
 pnpm --filter @reed/app dev
@@ -103,8 +101,8 @@ pnpm type-check
 ## Deployment
 
 ```bash
-# First time: import the repo in Vercel, set TURSO_DATABASE_URL /
-# TURSO_AUTH_TOKEN project env vars, bind a custom domain.
+# First time: import the repo in Vercel, set the DATABASE_URL
+# project env var, bind a custom domain.
 
 # Deploy from the CLI (or just push — Vercel builds from the repo)
 pnpm deploy
@@ -115,16 +113,19 @@ from `packages/worker/src/vercel-entry.ts`). After changing `packages/worker`
 code, run `pnpm build:api` and commit the regenerated bundle — the pre-commit
 hook fails if the committed bundle is stale.
 
-Schema migrations are applied directly to Turso:
+Schema migrations are applied directly to Neon:
 
 ```bash
-export TURSO_DATABASE_URL=libsql://...
-export TURSO_AUTH_TOKEN=...
+export DATABASE_URL=postgresql://...
 pnpm --filter @reed/worker db:migrate
 ```
 
 The hourly refresh workflow (`.github/workflows/refresh.yml`) needs the
-`TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` repository secrets.
+`DATABASE_URL` repository secret.
+
+Tests run against a throwaway Neon branch via `TEST_DATABASE_URL` — they
+truncate all tables, so never point it at a database you use. Unset, tests
+skip.
 
 ---
 
@@ -133,7 +134,7 @@ The hourly refresh workflow (`.github/workflows/refresh.yml`) needs the
 ```bash
 # Edit packages/worker/src/db/schema.ts, then:
 pnpm --filter @reed/worker db:generate   # generates SQL in drizzle/
-pnpm --filter @reed/worker db:migrate    # apply to Turso (TURSO_* env vars)
+pnpm --filter @reed/worker db:migrate    # apply to Neon (DATABASE_URL)
 ```
 
 ---

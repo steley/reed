@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { feeds, folders } from "../../db/schema.ts";
+import { folders } from "../../db/schema.ts";
 import type { Variables } from "../index.ts";
 
 export const foldersRouter = new Hono<{ Variables: Variables }>();
@@ -90,9 +90,8 @@ foldersRouter.patch("/:id", async (c) => {
   return c.json(updated[0]);
 });
 
-// DELETE /api/folders/:id — feeds fall back to uncategorized, not deleted.
-// Done explicitly (not via the FK's ON DELETE SET NULL) because libsql does
-// not guarantee foreign_keys pragma is enabled in every environment.
+// DELETE /api/folders/:id — member feeds fall back to uncategorized via the
+// FK's ON DELETE SET NULL (enforced by Postgres).
 foldersRouter.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const db = c.get("db");
@@ -106,7 +105,6 @@ foldersRouter.delete("/:id", async (c) => {
     return c.json({ error: "Folder not found" }, 404);
   }
 
-  await db.update(feeds).set({ folderId: null }).where(eq(feeds.folderId, id));
   await db.delete(folders).where(eq(folders.id, id));
   return new Response(null, { status: 204 });
 });
