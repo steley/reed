@@ -1445,3 +1445,6 @@ dependencies flagged.
   Existing search tests (title/summary, content, multi-word AND, q+unread,
   FTS-syntax input) all pass unchanged under the LIKE path.
 - Full suite: 85 passing. Production needs `db:migrate` for 0003 before push.
+
+### Follow-up (same increment)
+- README Features list mentions mark-all-read; no code changes.

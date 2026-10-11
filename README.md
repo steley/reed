@@ -15,7 +15,7 @@ A personal RSS reader built on Vercel (Hono), Turso (libSQL/SQLite), and GitHub 
 - Add RSS 2.0 and Atom feeds by URL
 - Hourly background refresh via GitHub Actions; manual refresh-all or per-feed
 - Full-text search across article titles and bodies (SQLite FTS5)
-- Read/unread tracking, auto-mark-read on open
+- Read/unread tracking, auto-mark-read on open; mark all as read per feed or globally
 - Sort articles newest or oldest first
 - Markdown and HTML article content rendering
 - Article titles link to original posts
