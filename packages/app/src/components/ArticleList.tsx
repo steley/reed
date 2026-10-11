@@ -6,7 +6,6 @@ interface Props {
   articles: Article[];
   selectedArticleId: string | null;
   selectedFeed: Feed | null;
-  heading?: string | undefined; // overrides the feed name (folder view)
   feedsById: Record<string, Feed>;
   isRefreshing: boolean;
   sortAsc: boolean;
@@ -21,7 +20,6 @@ export function ArticleList({
   articles,
   selectedArticleId,
   selectedFeed,
-  heading,
   feedsById,
   isRefreshing,
   sortAsc,
@@ -49,7 +47,7 @@ export function ArticleList({
           <Menu width={17} height={17} />
         </button>
         <h1 className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-tight">
-          {heading ?? (selectedFeed ? feedDisplayName(selectedFeed) : "All articles")}
+          {selectedFeed ? feedDisplayName(selectedFeed) : "All articles"}
           <span className="ml-2 text-[13px] font-normal text-ink-3 tabular-nums">
             {articles.length}
           </span>

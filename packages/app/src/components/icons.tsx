@@ -127,3 +127,9 @@ export const FolderPlus = (props: P) => (
     <path d="M9 13h6" />
   </svg>
 );
+
+export const ChevronRight = (props: P) => (
+  <svg {...base(props)}>
+    <path d="m9 18 6-6-6-6" />
+  </svg>
+);

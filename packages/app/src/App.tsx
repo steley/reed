@@ -14,7 +14,6 @@ export function App() {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [addFeedOpen, setAddFeedOpen] = useState(false);
   // folderId null = create mode; set = rename mode, initial = current name
@@ -39,16 +38,16 @@ export function App() {
     foldersApi.list().then(setFolders).catch(console.error);
   }, []);
 
-  const reloadArticles = useCallback(async (feedId: string | null, folderId: string | null) => {
-    const opts = feedId ? { feedId } : folderId ? { folderId } : undefined;
+  const reloadArticles = useCallback(async (feedId: string | null) => {
+    const opts = feedId ? { feedId } : undefined;
     setArticles(await articlesApi.list(opts));
   }, []);
 
-  // Load articles when the selected feed or folder changes
+  // Load articles when the selected feed changes
   useEffect(() => {
-    reloadArticles(selectedFeedId, selectedFolderId).catch(console.error);
+    reloadArticles(selectedFeedId).catch(console.error);
     setSelectedArticleId(null);
-  }, [selectedFeedId, selectedFolderId, reloadArticles]);
+  }, [selectedFeedId, reloadArticles]);
 
   // Unread counts per feed (from the currently loaded list; total from all feeds)
   const unreadCounts = useMemo(() => {
@@ -76,7 +75,6 @@ export function App() {
   }, [reloadTotalUnread]);
 
   const selectedFeed = feeds.find((f) => f.id === selectedFeedId) ?? null;
-  const selectedFolder = folders.find((f) => f.id === selectedFolderId) ?? null;
   const selectedArticle = articles.find((a) => a.id === selectedArticleId) ?? null;
   const selectedArticleFeed = selectedArticle
     ? (feeds.find((f) => f.id === selectedArticle.feedId) ?? null)
@@ -85,20 +83,16 @@ export function App() {
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const targets = selectedFeedId
-        ? [selectedFeedId]
-        : selectedFolderId
-          ? feeds.filter((f) => f.folderId === selectedFolderId).map((f) => f.id)
-          : feeds.map((f) => f.id);
+      const targets = selectedFeedId ? [selectedFeedId] : feeds.map((f) => f.id);
       await Promise.allSettled(targets.map((id) => feedsApi.refresh(id)));
-      await Promise.all([reloadArticles(selectedFeedId, selectedFolderId), reloadTotalUnread()]);
+      await Promise.all([reloadArticles(selectedFeedId), reloadTotalUnread()]);
       setFeeds(await feedsApi.list());
     } catch (err) {
       console.error("Refresh failed:", err);
     } finally {
       setIsRefreshing(false);
     }
-  }, [feeds, selectedFeedId, selectedFolderId, reloadArticles, reloadTotalUnread]);
+  }, [feeds, selectedFeedId, reloadArticles, reloadTotalUnread]);
 
   const handleAddFeed = useCallback(
     async (url: string) => {
@@ -111,7 +105,7 @@ export function App() {
       }
       setFeeds(await feedsApi.list());
       setSelectedFeedId(feed.id);
-      await reloadArticles(feed.id, null);
+      await reloadArticles(feed.id);
       await reloadTotalUnread();
     },
     [reloadArticles, reloadTotalUnread],
@@ -150,13 +144,6 @@ export function App() {
 
   const handleSelectFeed = useCallback((id: string | null) => {
     setSelectedFeedId(id);
-    setSelectedFolderId(null);
-    setSidebarOpen(false);
-  }, []);
-
-  const handleSelectFolder = useCallback((id: string | null) => {
-    setSelectedFolderId(id);
-    setSelectedFeedId(null);
     setSidebarOpen(false);
   }, []);
 
@@ -170,19 +157,12 @@ export function App() {
     setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)));
   }, []);
 
-  const handleDeleteFolder = useCallback(
-    async (id: string) => {
-      await foldersApi.delete(id);
-      setFolders((prev) => prev.filter((f) => f.id !== id));
-      // Feeds survive; move them back to uncategorized in local state
-      setFeeds((prev) => prev.map((f) => (f.folderId === id ? { ...f, folderId: null } : f)));
-      if (selectedFolderId === id) {
-        setSelectedFolderId(null);
-        setSelectedArticleId(null);
-      }
-    },
-    [selectedFolderId],
-  );
+  const handleDeleteFolder = useCallback(async (id: string) => {
+    await foldersApi.delete(id);
+    setFolders((prev) => prev.filter((f) => f.id !== id));
+    // Feeds survive; move them back to uncategorized in local state
+    setFeeds((prev) => prev.map((f) => (f.folderId === id ? { ...f, folderId: null } : f)));
+  }, []);
 
   const handleMoveFeed = useCallback(
     async (feedId: string, folderId: string | null) => {
@@ -190,12 +170,8 @@ export function App() {
       if (!feed || feed.folderId === folderId) return;
       const updated = await feedsApi.update(feedId, { folderId });
       setFeeds((prev) => prev.map((f) => (f.id === feedId ? updated : f)));
-      // If the moved feed left the folder being viewed, reload its articles
-      if (selectedFolderId && folderId !== selectedFolderId) {
-        await reloadArticles(null, selectedFolderId).catch(console.error);
-      }
     },
-    [feeds, selectedFolderId, reloadArticles],
+    [feeds],
   );
 
   return (
@@ -204,13 +180,11 @@ export function App() {
         feeds={feeds}
         folders={folders}
         selectedFeedId={selectedFeedId}
-        selectedFolderId={selectedFolderId}
         unreadCounts={unreadCounts}
         totalUnread={totalUnread}
         isDark={isDark}
         open={sidebarOpen}
         onSelectFeed={handleSelectFeed}
-        onSelectFolder={handleSelectFolder}
         onAddFeed={() => setAddFeedOpen(true)}
         onAddFolder={() => setFolderDialog({ folderId: null, initial: "" })}
         onRenameFolder={(id) =>
@@ -236,7 +210,6 @@ export function App() {
           articles={articles}
           selectedArticleId={selectedArticleId}
           selectedFeed={selectedFeed}
-          heading={selectedFolder?.name ?? undefined}
           feedsById={Object.fromEntries(feeds.map((f) => [f.id, f]))}
           isRefreshing={isRefreshing}
           sortAsc={sortAsc}

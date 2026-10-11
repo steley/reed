@@ -1169,3 +1169,58 @@ dependencies flagged.
 - HTML5 drag-and-drop does not exist on touch devices — there is currently no
   mobile way to assign a folder (acceptable for now; a long-press menu would
   be the upgrade path).
+
+---
+
+## Increment — Folder expand/collapse
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was built
+- Folder rows toggle expand/collapse on click (rotating `ChevronRight`
+  indicator, `aria-expanded`). Default collapsed; auto-expanded while the
+  folder has unread articles or contains the selected feed. Manual choices
+  are an `expandOverride: Record<string, boolean>` map in `FeedSidebar` local
+  state (session-only, not persisted) that beats the auto rule.
+- **Removed the folder article view** that the previous increment added:
+  folder click now means expand/collapse, so `selectedFolderId`,
+  `handleSelectFolder`, the `heading` prop on `ArticleList`, and the
+  `folderId` option in the app's `articlesApi.list` were all deleted. The
+  server's `GET /api/articles?folder_id=` filter and its tests stay — API
+  surface for the future CLI, no UI consumer.
+- Collapsing a folder that contains the selected feed deselects it first
+  (`onSelectFeed(null)`), so the view falls back to "All articles" instead of
+  leaving an orphaned selection whose row just vanished from the sidebar.
+- Drop targets work on collapsed folders (drag a feed in; folder stays
+  collapsed, unread badge updates).
+
+### Decisions made
+- **Auto-expand = `unread > 0 || contains selected feed`.** The unread half
+  is the user's spec ("内有未读时为展开状态"); the containment half prevents
+  the active row from hiding itself — without it, reading a feed inside an
+  auto-collapsed folder (unread hits 0 after auto-mark-read) makes the folder
+  snap shut around the current selection. The deselection-on-collapse rule
+  resolves the remaining conflict: without it, clicking to collapse while
+  reading inside the folder would immediately re-expand (display rule wins)
+  or hide the active row (override wins). Falling back to All articles is the
+  only coherent outcome.
+- **`expandOverride` map instead of persisted state:** the default rule
+  (collapsed / unread→expanded) is the product behavior; persistence would
+  turn it into a fourth state to reason about for little gain. Add
+  localStorage if it ever bothers the user.
+- **Deselect on collapse implemented in `toggleFolder` (sidebar), not App:**
+  the sidebar owns expansion state and already has `onSelectFeed`; App does
+  not need to know folders collapse.
+
+### Gotchas
+- The bug the deselection rule fixes was caught in browser automation, not by
+  reasoning ahead: select a feed inside Tech → click Tech → feed row
+  disappeared while the reader still showed it. Tests can't catch this class
+  (no app-side test rig); drive the real UI for interaction changes.
+- Playwright locator flake on a freshly reloaded IAB tab (click on a
+  snapshot-proven button timed out with no state change) — page-level
+  `element.click()` via `evaluate` was the reliable path for React synthetic
+  onClick handlers.
+- `element.textContent` of sidebar rows concatenates the avatar letter with
+  the name ("AAlpha Blog"); accessible-name matching (aria snapshot /
+  `textContent.includes`) is the correct check for row visibility.

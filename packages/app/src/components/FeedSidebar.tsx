@@ -1,19 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Feed, Folder } from "@reed/types";
 import { avatarColor, compareNames, feedDisplayName } from "../lib/display.ts";
-import { Folder as FolderIcon, FolderPlus, Moon, Plus, ReedMark, Sun, Trash } from "./icons.tsx";
+import {
+  ChevronRight,
+  Folder as FolderIcon,
+  FolderPlus,
+  Moon,
+  Plus,
+  ReedMark,
+  Sun,
+  Trash,
+} from "./icons.tsx";
 
 interface Props {
   feeds: Feed[];
   folders: Folder[];
   selectedFeedId: string | null;
-  selectedFolderId: string | null;
   unreadCounts: Record<string, number>;
   totalUnread: number;
   isDark: boolean;
   open: boolean; // mobile drawer state; always visible on desktop
   onSelectFeed(id: string | null): void;
-  onSelectFolder(id: string | null): void;
   onAddFeed(): void;
   onAddFolder(): void;
   onRenameFolder(id: string): void;
@@ -105,13 +112,11 @@ export function FeedSidebar({
   feeds,
   folders,
   selectedFeedId,
-  selectedFolderId,
   unreadCounts,
   totalUnread,
   isDark,
   open,
   onSelectFeed,
-  onSelectFolder,
   onAddFeed,
   onAddFolder,
   onRenameFolder,
@@ -125,6 +130,8 @@ export function FeedSidebar({
   const [menu, setMenu] = useState<{ folderId: string; x: number; y: number } | null>(null);
   // Folder id (or UNCATEGORIZED) currently highlighted as a drop target
   const [dragOver, setDragOver] = useState<string | null>(null);
+  // Manual expand/collapse choices; unset folders fall back to the auto rule
+  const [expandOverride, setExpandOverride] = useState<Record<string, boolean>>({});
 
   // Auto-ascending order: folders and feeds both sort by display name
   const sortedFolders = useMemo(
@@ -149,6 +156,28 @@ export function FeedSidebar({
     sortedFeeds
       .filter((f) => f.folderId === folderId)
       .reduce((sum, f) => sum + (unreadCounts[f.id] ?? 0), 0);
+
+  // Collapsed by default; auto-expanded while the folder has unread articles
+  // or contains the selected feed (so the active row never hides itself)
+  const isExpanded = (folderId: string) => {
+    const override = expandOverride[folderId];
+    if (override !== undefined) return override;
+    if (folderUnread(folderId) > 0) return true;
+    return sortedFeeds.some((f) => f.folderId === folderId && f.id === selectedFeedId);
+  };
+
+  const toggleFolder = (folderId: string) => {
+    const wasExpanded = isExpanded(folderId);
+    setExpandOverride((prev) => ({ ...prev, [folderId]: !wasExpanded }));
+    // Collapsing would hide the selected feed inside — deselect it first
+    if (
+      wasExpanded &&
+      selectedFeedId &&
+      sortedFeeds.some((f) => f.folderId === folderId && f.id === selectedFeedId)
+    ) {
+      onSelectFeed(null);
+    }
+  };
 
   const dropHandlers = (target: string, folderId: string | null) => ({
     onDragOver: (e: React.DragEvent) => {
@@ -210,7 +239,7 @@ export function FeedSidebar({
             type="button"
             onClick={() => onSelectFeed(null)}
             className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-              selectedFeedId === null && selectedFolderId === null
+              selectedFeedId === null
                 ? "bg-card font-medium text-ink"
                 : "text-ink-2 hover:bg-card/60 hover:text-ink"
             }`}
@@ -229,7 +258,7 @@ export function FeedSidebar({
               </div>
               <ul className="space-y-0.5">
                 {sortedFolders.map((folder) => {
-                  const selected = folder.id === selectedFolderId;
+                  const expanded = isExpanded(folder.id);
                   const unread = folderUnread(folder.id);
                   const highlighted = dragOver === folder.id;
                   return (
@@ -242,20 +271,22 @@ export function FeedSidebar({
                         }}
                         {...dropHandlers(folder.id, folder.id)}
                         className={`group flex select-none items-center rounded-lg pr-1.5 transition-colors ${
-                          highlighted
-                            ? "bg-card ring-1 ring-accent"
-                            : selected
-                              ? "bg-card"
-                              : "hover:bg-card/60"
+                          highlighted ? "bg-card ring-1 ring-accent" : "hover:bg-card/60"
                         }`}
                       >
                         <button
                           type="button"
-                          onClick={() => onSelectFolder(folder.id)}
-                          className={`flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-left text-sm ${
-                            selected ? "font-medium text-ink" : "text-ink-2 hover:text-ink"
-                          }`}
+                          onClick={() => toggleFolder(folder.id)}
+                          aria-expanded={expanded}
+                          className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-left text-sm text-ink-2 hover:text-ink"
                         >
+                          <ChevronRight
+                            width={12}
+                            height={12}
+                            className={`shrink-0 text-ink-3 transition-transform ${
+                              expanded ? "rotate-90" : ""
+                            }`}
+                          />
                           <FolderIcon width={14} height={14} className="shrink-0 text-ink-3" />
                           <span className="truncate">{folder.name}</span>
                         </button>
@@ -265,9 +296,10 @@ export function FeedSidebar({
                           </span>
                         ) : null}
                       </div>
-                      {sortedFeeds
-                        .filter((f) => f.folderId === folder.id)
-                        .map((feed) => renderFeed(feed, true))}
+                      {expanded &&
+                        sortedFeeds
+                          .filter((f) => f.folderId === folder.id)
+                          .map((feed) => renderFeed(feed, true))}
                     </li>
                   );
                 })}

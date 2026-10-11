@@ -99,10 +99,9 @@ export const foldersApi = {
 // ---------------------------------------------------------------------------
 
 export const articlesApi = {
-  list(opts?: { feedId?: string; folderId?: string; unread?: boolean }): Promise<Article[]> {
+  list(opts?: { feedId?: string; unread?: boolean }): Promise<Article[]> {
     const params = new URLSearchParams();
     if (opts?.feedId) params.set("feed_id", opts.feedId);
-    if (opts?.folderId) params.set("folder_id", opts.folderId);
     if (opts?.unread) params.set("unread", "true");
     const qs = params.size > 0 ? `?${params.toString()}` : "";
     return request<Article[]>(`/articles${qs}`);
