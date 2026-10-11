@@ -118,6 +118,7 @@ body {
   /* syntax highlighters (e.g. Chroma) wrap code in tables; without this the
      table sizes to its widest code line and drags the whole pane wide */
   display: block;
+  width: 100%;
   max-width: 100%;
   overflow-x: auto;
   border-collapse: collapse;

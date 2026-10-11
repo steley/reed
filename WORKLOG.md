@@ -2168,3 +2168,6 @@ CSS fix: `.article-body table { display: block; max-width: 100%;
 overflow-x: auto; }` — block-level table scrolls horizontally inside the
 pane. Covers all highlighter-table and wide-data-table cases; frontend
 only, no re-extraction needed.
+
+En route: width: 100% on .article-body table — short code blocks were
+half-pane; fill the content width, wide ones still scroll.
