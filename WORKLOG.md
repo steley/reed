@@ -1939,3 +1939,16 @@ the appended multi-user scoping tests in feeds.test.ts create their own
 fixtures instead of relying on other tests' inserts.
 Suite result: 116/116 pass against real Postgres. Branch connection string
 stays out of the repo (env var only).
+
+### Feed icons in the sidebar (2026-10-11)
+Sidebar feed rows were letter avatars only, even though `feeds.image_url`
+(RSS `<image>` / `<itunes:image>`) has been parsed and stored since phase 1
+and the `Feed` type already carried `imageUrl`. `Avatar` in FeedSidebar now
+prefers the site icon: `feed.imageUrl` first, falling back to
+`siteUrl + /favicon.ico` (resolved via `new URL`, so path-only siteUrls
+resolve against the origin); an `<img>` that errors (404, hotlink block,
+invalid URL) swaps back to the letter avatar via one `onError` state —
+no fetch probing, the browser does the work. Discarded: favicon-proxy
+services (Google s2 is unreachable from mainland China) and server-side
+favicon scraping on refresh (extra fetch per feed per hour for marginal
+coverage beyond `favicon.ico`).

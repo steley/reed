@@ -34,9 +34,32 @@ interface Props {
   onClose(): void; // close mobile drawer
 }
 
-function Avatar({ seed }: { seed: string }) {
+function Avatar({ feed }: { feed: Feed }) {
+  // Site icon when grabbable (feed <image>, else siteUrl /favicon.ico);
+  // letter avatar on error or when neither exists
+  const [failed, setFailed] = useState(false);
+  const seed = feed.title ?? feed.url;
   const { bg, fg } = avatarColor(seed);
-  const name = feedDisplayName({ title: seed, url: "" });
+  const name = feedDisplayName({ title: feed.title, url: feed.url });
+  let icon = feed.imageUrl;
+  if (!icon && feed.siteUrl) {
+    try {
+      icon = new URL("/favicon.ico", feed.siteUrl).href;
+    } catch {
+      icon = null;
+    }
+  }
+  if (icon && !failed) {
+    return (
+      <img
+        src={icon}
+        alt=""
+        aria-hidden
+        className="size-5 shrink-0 rounded bg-canvas object-contain"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
   return (
     <span
       className="flex size-5 shrink-0 items-center justify-center rounded text-[10px] font-bold"
@@ -103,7 +126,7 @@ function FeedRow({
           selected ? "text-ink" : "text-ink-2 hover:text-ink"
         }`}
       >
-        <Avatar seed={feed.title ?? feed.url} />
+        <Avatar feed={feed} />
         <span className="truncate">{name}</span>
       </button>
       {unread > 0 ? (
