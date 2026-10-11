@@ -28,6 +28,18 @@ export function absolutizeUrls(html: string, baseUrl: string): string {
 }
 
 /**
+ * Remove article-scoped headers carrying page metadata (date, tags). The
+ * reader shows title and date from parsed metadata itself; Readability
+ * otherwise folds such a header's meta paragraph into the body text (a
+ * date glued to a run of tag links).
+ */
+function stripArticleHeaders(document: ReturnType<typeof parseHTML>["document"]): void {
+  for (const header of document.querySelectorAll("article header, main header")) {
+    if (header.querySelector("time")) header.remove();
+  }
+}
+
+/**
  * Unwrap <blockquote> elements before extraction. Readability scores
  * paragraphs by their container, so a long quoted statement inside a
  * blockquote (e.g. a bilingual post quoting a source) out-competes the real
@@ -55,6 +67,7 @@ export async function extractFullText(url: string): Promise<string | null> {
   try {
     const html = await fetchWithGuards(url, ACCEPT_HTML);
     const { document } = parseHTML(html);
+    stripArticleHeaders(document);
     unwrapBlockquotes(document);
     const parsed = new Readability(document).parse();
     const content = parsed?.content?.trim();

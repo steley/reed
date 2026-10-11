@@ -31250,6 +31250,11 @@ function absolutizeUrls(html, baseUrl) {
   }
   return document2.body.innerHTML;
 }
+function stripArticleHeaders(document2) {
+  for (const header of document2.querySelectorAll("article header, main header")) {
+    if (header.querySelector("time")) header.remove();
+  }
+}
 function unwrapBlockquotes(document2) {
   for (const bq of [...document2.querySelectorAll("blockquote")]) {
     const parent = bq.parentNode;
@@ -31262,6 +31267,7 @@ async function extractFullText(url) {
   try {
     const html = await fetchWithGuards(url, ACCEPT_HTML);
     const { document: document2 } = parseHTML(html);
+    stripArticleHeaders(document2);
     unwrapBlockquotes(document2);
     const parsed = new import_readability.Readability(document2).parse();
     const content = parsed?.content?.trim();

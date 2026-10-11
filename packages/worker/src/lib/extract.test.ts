@@ -74,6 +74,24 @@ describe("extractFullText", () => {
     expect(content).toContain("结论性的观察");
   });
 
+  it("drops article header metadata (date, tags) from the body", async () => {
+    const page = `<!doctype html><html><body><article>
+      <header class="post-head">
+        <h1>Post Title</h1>
+        <p class="meta"><time datetime="2026-09-22">2026-09-22</time>
+          <span class="post-tags"><a href="/tags/a.html">TagA</a><a href="/tags/b.html">TagB</a></span>
+        </p>
+      </header>
+      ${Array.from({ length: 6 }, (_, i) => `<p>Body paragraph ${i} with enough text for the readability scorer.</p>`).join("\n")}
+    </article></body></html>`;
+    vi.mocked(fetch).mockResolvedValue(new Response(page, { status: 200 }));
+
+    const content = await extractFullText("https://blog.example.com/post");
+    expect(content).not.toContain("2026-09-22");
+    expect(content).not.toContain("TagA");
+    expect(content).toContain("Body paragraph 0");
+  });
+
   it("returns null on HTTP failure", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("nope", { status: 404 }));
     expect(await extractFullText("https://blog.example.com/post")).toBeNull();

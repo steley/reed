@@ -2110,3 +2110,17 @@ now accepts `backfill [--force] [url-substring]`: --force re-runs
 extraction on rows that already have content (failed re-extracts keep the
 stored body), the optional substring narrows selection by URL. Targeted
 use: `pnpm --filter @reed/worker backfill --force httpsmail.com`.
+
+### Fix en route: article header metadata leaked into extracted body (2026-10-11)
+Report via httpsmail.com's foundermail post: extraction output began with
+"2026-09-22 FounderMail域名邮箱" — the theme's `<article><header class=
+"post-head">` holds h1 + a meta paragraph (`<time>` + tag links). Readability
+stripped the h1 (title duplication) but scored the meta paragraph into the
+body, and adjacent date/tag text renders glued together.
+
+Fix: `stripArticleHeaders()` in `lib/extract.ts` — before Readability,
+remove `article header` / `main header` elements containing a `<time>`
+element. Dates are page chrome (the reader renders its own date line);
+scoping to article/main headers with `<time>` keeps site-wide nav headers
+untouched for Readability's own handling. Verified against the fetched
+page: date/tag gone, body intact.
