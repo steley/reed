@@ -74,13 +74,14 @@ export function App() {
     const controller = new AbortController();
     const feedChanged = prevFeedId.current !== selectedFeedId;
     prevFeedId.current = selectedFeedId;
-    if (feedChanged) setArticles([]);
     setSelectedArticleId(null);
     // Cache hit: paint the last known list now (no spinner); the fetch below
-    // still runs and replaces the view when the fresh response lands.
+    // still runs and replaces the view when the fresh response lands. No hit
+    // on a feed switch → clear the list so the spinner shows instead.
     const cached = searchQuery.trim()
       ? undefined
       : articlesCache.current.get(selectedFeedId ?? "all");
+    if (feedChanged || cached) setArticles(cached ?? []);
     setIsLoadingArticles(!cached);
     reloadArticles(selectedFeedId, searchQuery, controller.signal)
       .catch((err: unknown) => {

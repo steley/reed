@@ -1685,3 +1685,21 @@ to the cached-or-null value first.
 ### Deliberately NOT done
 - No prefetch of unvisited feeds (N requests per load for a maybe).
 - No debounce on search — payloads are small now.
+
+---
+
+## Increment — Fix: cache hit never painted the cached list
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was built
+Bug from the previous increment: the SWR effect computed the cache hit and
+turned the spinner off, but never called `setArticles(cached)` — so a repeat
+feed switch showed an empty list reading "Nothing here yet." until the
+revalidate landed (worse than the spinner). The effect now paints the cached
+list (or clears, when a switch misses) before fetching.
+
+### Gotchas
+- `if (feedChanged || cached) setArticles(cached ?? [])` covers both paths in
+  one line: switch-miss → `[]` + spinner; hit → cached, no spinner; search
+  keystroke (no hit by design) → no-op, list stays visible.
