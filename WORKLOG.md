@@ -1589,3 +1589,58 @@ light stem + brighter gradient (CSS `<style>` inside the SVG).
 ### Deliberately NOT done
 - No maskable/Safari pinned-tab icon variants — single-user app, revisit if
   the PWA story ever changes.
+
+---
+
+## Increment — Faster feed switching: list payloads drop `content`
+**Date:** 2026-10-11
+**Status:** Complete
+
+### What was built
+Switching feeds in the sidebar felt laggy: every switch refetched
+`GET /api/articles`, which returned **every column including the full
+`content` body** for every article with no LIMIT — potentially megabytes per
+click — and the UI gave no feedback until the whole response landed (the old
+feed's cards lingered, then swapped at once).
+
+- `packages/worker/src/worker/routes/articles.ts` — `GET /api/articles` now
+  selects everything except `content`. New `GET /api/articles/:id` returns the
+  full article (with content) for the reader; 404 on unknown id. `unread=true`
+  (sidebar badges) benefits automatically.
+- `@reed/types` — new `ArticleListItem = Omit<Article, "content">` for list
+  responses.
+- `packages/app/src/lib/api.ts` — `articlesApi.list()` returns
+  `ArticleListItem[]`; new `articlesApi.get(id)`.
+- `packages/app/src/App.tsx` — on a feed switch the list is cleared
+  immediately and `isLoadingArticles` shows "Loading…" in the list pane until
+  the response lands (search keystrokes keep the current list visible — only
+  feed switches clear). Opening an article fetches the full row by id
+  (`fullArticle` state, cancelled-flag race guard): title/summary render
+  instantly from the list row, the body swaps to full content when it lands.
+- `ArticleList` — `isLoading` prop, empty-state text switches between
+  "Loading…" and "Nothing here yet.".
+
+### Decisions made
+- **Strip content server-side rather than cache client-side first:** the
+  payload cut is ~10–50× for text-heavy feeds and helps every consumer
+  (list, unread badges, search) with one change; a per-feed cache only helps
+  repeat visits and needs invalidation wiring. If switching still feels slow
+  after this, a `Map<feedId, ArticleListItem[]>` invalidated on refresh /
+  mark-read is the next rung.
+- **Progressive reader render:** reader first shows the summary-derived body,
+  then full content — avoids a blank reader pane and looks identical for feeds
+  whose content equals the summary.
+- **No LIMIT/pagination on the list:** single-user scale; payload size was the
+  problem, row count wasn't. Revisit if a feed accumulates thousands of rows.
+
+### Gotchas
+- `articles.url` UNIQUE + the FTS sync triggers are untouched — the narrower
+  select is query-side only, no schema change.
+- `handleMarkRead` PATCHes return the full `Article` (with content); it stays
+  assignable into the `ArticleListItem[]` state, no special-casing needed.
+- Search highlighting is unaffected — it paints `title`/`summary`, both still
+  in the list payload.
+
+### Deliberately NOT done
+- No client-side per-feed cache yet (see decision above).
+- No virtualized list — row count unchanged by this change.

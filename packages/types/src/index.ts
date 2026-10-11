@@ -76,6 +76,12 @@ export interface Article {
 }
 
 /**
+ * Article as returned by list endpoints (GET /api/articles) — the heavy
+ * `content` column is omitted; full bodies come from GET /api/articles/:id.
+ */
+export type ArticleListItem = Omit<Article, "content">;
+
+/**
  * Input shape for updating an article.
  */
 export interface UpdateArticle {

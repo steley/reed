@@ -52,6 +52,24 @@ describe("GET /api/articles", () => {
     expect(body).toHaveLength(2);
   });
 
+  it("omits the content column from list responses", async () => {
+    await db.insert(articles).values({
+      id: "art-full",
+      feedId: FEED_ID,
+      url: "https://example.com/full",
+      content: "very long body",
+      createdAt: Date.now(),
+      read: 0,
+    });
+
+    const res = await app.request("/api/articles");
+    const body = (await res.json()) as Array<Record<string, unknown>>;
+    for (const row of body) {
+      expect(row).not.toHaveProperty("content");
+    }
+    expect(body).toHaveLength(3);
+  });
+
   it("filters by feed_id", async () => {
     // Insert article for a different feed
     await db
@@ -160,6 +178,34 @@ describe("GET /api/articles", () => {
     const res = await app.request(`/api/articles?q=${encodeURIComponent('" OR 1=1 --')}`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/articles/:id
+// ---------------------------------------------------------------------------
+
+describe("GET /api/articles/:id", () => {
+  it("returns the full article including content", async () => {
+    await db.insert(articles).values({
+      id: "art-full",
+      feedId: FEED_ID,
+      url: "https://example.com/full",
+      content: "very long body",
+      createdAt: Date.now(),
+      read: 0,
+    });
+
+    const res = await app.request("/api/articles/art-full");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body["content"]).toBe("very long body");
+    expect(body["id"]).toBe("art-full");
+  });
+
+  it("returns 404 for unknown article", async () => {
+    const res = await app.request("/api/articles/nonexistent");
+    expect(res.status).toBe(404);
   });
 });
 

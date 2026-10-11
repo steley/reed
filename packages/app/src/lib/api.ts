@@ -1,5 +1,6 @@
 import type {
   Article,
+  ArticleListItem,
   Feed,
   Folder,
   NewFeed,
@@ -121,16 +122,21 @@ export const opmlApi = {
 // ---------------------------------------------------------------------------
 
 export const articlesApi = {
+  // List responses omit `content` — fetch the full article by id when opened
   list(
     opts?: { feedId?: string; unread?: boolean; q?: string },
     signal?: AbortSignal,
-  ): Promise<Article[]> {
+  ): Promise<ArticleListItem[]> {
     const params = new URLSearchParams();
     if (opts?.feedId) params.set("feed_id", opts.feedId);
     if (opts?.unread) params.set("unread", "true");
     if (opts?.q) params.set("q", opts.q);
     const qs = params.size > 0 ? `?${params.toString()}` : "";
     return request<Article[]>(`/articles${qs}`, signal ? { signal } : undefined);
+  },
+
+  get(id: string): Promise<Article> {
+    return request<Article>(`/articles/${id}`);
   },
 
   readAll(feedId?: string): Promise<{ marked: number }> {

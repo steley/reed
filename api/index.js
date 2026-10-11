@@ -14659,8 +14659,25 @@ articlesRouter.get("/", async (c) => {
     );
   }
   if (unread === "true") conditions.push(eq(articles.read, 0));
-  const rows = await db.select().from(articles).where(conditions.length > 0 ? and(...conditions) : void 0).orderBy(desc(articles.publishedAt));
+  const rows = await db.select({
+    id: articles.id,
+    feedId: articles.feedId,
+    url: articles.url,
+    title: articles.title,
+    summary: articles.summary,
+    publishedAt: articles.publishedAt,
+    read: articles.read,
+    createdAt: articles.createdAt
+  }).from(articles).where(conditions.length > 0 ? and(...conditions) : void 0).orderBy(desc(articles.publishedAt));
   return c.json(rows);
+});
+articlesRouter.get("/:id", async (c) => {
+  const db = c.get("db");
+  const rows = await db.select().from(articles).where(eq(articles.id, c.req.param("id"))).limit(1);
+  if (rows.length === 0) {
+    return c.json({ error: "Article not found" }, 404);
+  }
+  return c.json(rows[0]);
 });
 articlesRouter.post("/read-all", async (c) => {
   const db = c.get("db");

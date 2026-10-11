@@ -1,5 +1,5 @@
-import type { Article, Feed, Folder } from "@reed/types";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Article, ArticleListItem, Feed, Folder } from "@reed/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AddFeedDialog } from "./components/AddFeedDialog.tsx";
 import { ArticleList } from "./components/ArticleList.tsx";
 import { ArticleReader } from "./components/ArticleReader.tsx";
@@ -13,7 +13,7 @@ const THEME_KEY = "reed-theme";
 export function App() {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
-  const [articles, setArticles] = useState<Article[]>([]);
+  const [articles, setArticles] = useState<ArticleListItem[]>([]);
   const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [addFeedOpen, setAddFeedOpen] = useState(false);
@@ -53,23 +53,36 @@ export function App() {
   );
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoadingArticles, setIsLoadingArticles] = useState(true);
+  const prevFeedId = useRef<string | null>(selectedFeedId);
 
   // Load articles when the selected feed or search query changes. Each effect
   // run aborts the previous in-flight request so a slow stale response can
-  // never overwrite the newer one.
+  // never overwrite the newer one. A feed switch clears the list immediately
+  // (with a loading indicator) so the old feed's cards never linger; a search
+  // keystroke keeps the current list visible until the fresh response lands.
   useEffect(() => {
     const controller = new AbortController();
-    reloadArticles(selectedFeedId, searchQuery, controller.signal).catch((err: unknown) => {
-      if ((err as Error).name !== "AbortError") console.error(err);
-    });
+    const feedChanged = prevFeedId.current !== selectedFeedId;
+    prevFeedId.current = selectedFeedId;
+    if (feedChanged) setArticles([]);
+    setIsLoadingArticles(true);
     setSelectedArticleId(null);
+    reloadArticles(selectedFeedId, searchQuery, controller.signal)
+      .catch((err: unknown) => {
+        if ((err as Error).name !== "AbortError") console.error(err);
+      })
+      .finally(() => {
+        // Skip on abort — the newer effect run owns the flag now
+        if (!controller.signal.aborted) setIsLoadingArticles(false);
+      });
     return () => controller.abort();
   }, [selectedFeedId, searchQuery, reloadArticles]);
 
   // All unread articles across every feed — single source of truth for the
   // sidebar badges. Derived from the view-scoped `articles` list instead and
   // the badges vanish the moment a feed filter narrows that list.
-  const [unreadList, setUnreadList] = useState<Article[]>([]);
+  const [unreadList, setUnreadList] = useState<ArticleListItem[]>([]);
   const reloadUnread = useCallback(async () => {
     try {
       setUnreadList(await articlesApi.list({ unread: true }));
@@ -91,7 +104,33 @@ export function App() {
   const totalUnread = unreadList.length;
 
   const selectedFeed = feeds.find((f) => f.id === selectedFeedId) ?? null;
-  const selectedArticle = articles.find((a) => a.id === selectedArticleId) ?? null;
+
+  // List rows omit `content` — fetch the full article when one is opened.
+  // Title/summary render immediately from the list row; the body swaps to the
+  // full content when the fetch lands.
+  const [fullArticle, setFullArticle] = useState<Article | null>(null);
+  useEffect(() => {
+    if (!selectedArticleId) {
+      setFullArticle(null);
+      return;
+    }
+    let cancelled = false;
+    articlesApi
+      .get(selectedArticleId)
+      .then((a) => {
+        if (!cancelled) setFullArticle(a);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) console.error(err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedArticleId]);
+
+  const selectedSummary = articles.find((a) => a.id === selectedArticleId) ?? null;
+  const selectedArticle: Article | null =
+    fullArticle ?? (selectedSummary ? { ...selectedSummary, content: null } : null);
   const selectedArticleFeed = selectedArticle
     ? (feeds.find((f) => f.id === selectedArticle.feedId) ?? null)
     : null;
@@ -272,6 +311,7 @@ export function App() {
       >
         <ArticleList
           articles={articles}
+          isLoading={isLoadingArticles}
           selectedArticleId={selectedArticleId}
           selectedFeed={selectedFeed}
           feedsById={Object.fromEntries(feeds.map((f) => [f.id, f]))}

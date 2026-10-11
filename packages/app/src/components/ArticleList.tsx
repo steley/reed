@@ -1,4 +1,4 @@
-import type { Article, Feed } from "@reed/types";
+import type { ArticleListItem, Feed } from "@reed/types";
 import { cleanSummary, feedDisplayName, highlightParts, relativeTime } from "../lib/display.ts";
 import { MarkAllRead, Menu, Refresh, Sort } from "./icons.tsx";
 
@@ -23,7 +23,8 @@ function Highlight({ text, query }: { text: string; query: string }) {
 }
 
 interface Props {
-  articles: Article[];
+  articles: ArticleListItem[];
+  isLoading: boolean;
   selectedArticleId: string | null;
   selectedFeed: Feed | null;
   feedsById: Record<string, Feed>;
@@ -41,6 +42,7 @@ interface Props {
 
 export function ArticleList({
   articles,
+  isLoading,
   selectedArticleId,
   selectedFeed,
   feedsById,
@@ -126,7 +128,7 @@ export function ArticleList({
       <div className="min-h-0 flex-1 overflow-y-auto">
         {sorted.length === 0 ? (
           <div className="flex h-full items-center justify-center px-6">
-            <p className="text-sm text-ink-3">Nothing here yet.</p>
+            <p className="text-sm text-ink-3">{isLoading ? "Loading…" : "Nothing here yet."}</p>
           </div>
         ) : (
           <ul>

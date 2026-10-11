@@ -255,7 +255,8 @@ Base path: `/api`
 | `POST` | `/api/folders` | Create folder `{ name: string }` → `201`; duplicate name → `409` |
 | `PATCH` | `/api/folders/:id` | Rename folder `{ name: string }` → `200` |
 | `DELETE` | `/api/folders/:id` | Delete folder; member feeds become uncategorized (not deleted) → `204` |
-| `GET` | `/api/articles` | List articles. Query params: `feed_id`, `folder_id`, `unread=true`, `q` (FTS5 full-text search over title/summary/content) |
+| `GET` | `/api/articles` | List articles, **without the `content` column** (payload leanness — see Frontend Conventions). Query params: `feed_id`, `folder_id`, `unread=true`, `q` (FTS5 full-text search over title/summary/content) |
+| `GET` | `/api/articles/:id` | Full article including `content`; 404 if unknown. The reader fetches this when an article is opened |
 | `PATCH` | `/api/articles/:id` | Update article `{ read: boolean }` → `200` |
 | `POST` | `/api/articles/read-all` | Mark all unread articles read; `{ feedId?: string }` scopes to one feed → `200 { marked }` |
 | `GET` | `/api/opml` | Export all feeds as OPML 2.0 XML download (`reed.opml`) |
@@ -334,6 +335,8 @@ repository secrets; locally they can be exported in the shell or set per-command
 - **Mark all read:** double-check button in the list header (only rendered while the current view has unread) → `POST /api/articles/read-all` scoped to the selected feed, or global when "All articles" is selected; App reloads the view list + `unreadList` afterwards. No confirm — unread state is the only thing at risk.
 - **Unread counts:** sidebar badges derive from a dedicated full unread fetch (`articlesApi.list({ unread: true })` → `unreadList` in App), never from the view-scoped `articles` state — that list is filtered by the current feed selection, so counts derived from it would vanish the moment a feed is selected. `handleMarkRead` keeps `unreadList` in sync for immediate feedback.
 - **Auto-mark-read:** selecting an article marks it read automatically.
+- **List payloads omit `content`:** `GET /api/articles` returns `ArticleListItem` (`Omit<Article, "content">`) — the full body column was making feed switches drag megabytes over the wire. App state `articles`/`unreadList` are `ArticleListItem[]`; opening an article fetches the full row via `articlesApi.get(id)` (`fullArticle` state in App, cancelled-flag race guard) and the reader renders summary-derived content first, swapping to the full body when it lands. Never widen a list select back to `db.select().from(articles)`.
+- **Feed-switch loading state:** a feed switch clears `articles` immediately and shows "Loading…" in the list pane (`isLoadingArticles`); search keystrokes keep the current list visible until the fresh response lands — only feed switches clear.
 
 ## General Conventions
 

@@ -47,13 +47,38 @@ articlesRouter.get("/", async (c) => {
   }
   if (unread === "true") conditions.push(eq(articles.read, 0));
 
+  // List responses omit `content` — full bodies are fetched per-article via
+  // GET /api/articles/:id, keeping feed-switch payloads small.
   const rows = await db
-    .select()
+    .select({
+      id: articles.id,
+      feedId: articles.feedId,
+      url: articles.url,
+      title: articles.title,
+      summary: articles.summary,
+      publishedAt: articles.publishedAt,
+      read: articles.read,
+      createdAt: articles.createdAt,
+    })
     .from(articles)
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(articles.publishedAt));
 
   return c.json(rows);
+});
+
+// GET /api/articles/:id — full article including content
+articlesRouter.get("/:id", async (c) => {
+  const db = c.get("db");
+  const rows = await db
+    .select()
+    .from(articles)
+    .where(eq(articles.id, c.req.param("id")))
+    .limit(1);
+  if (rows.length === 0) {
+    return c.json({ error: "Article not found" }, 404);
+  }
+  return c.json(rows[0]);
 });
 
 // POST /api/articles/read-all — mark every unread article read,
