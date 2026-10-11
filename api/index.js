@@ -17011,7 +17011,13 @@ async function jsonBody(c) {
     return null;
   }
 }
+function authConfigured() {
+  return Boolean(process.env.AUTH_SECRET);
+}
 authRouter.post("/register", async (c) => {
+  if (!authConfigured()) {
+    return c.json({ error: "AUTH_SECRET is not set on the server" }, 503);
+  }
   const body = await jsonBody(c);
   if (body === null) return c.json({ error: "Invalid JSON body" }, 400);
   const requiredCode = process.env.SIGNUP_CODE;
@@ -17025,6 +17031,7 @@ authRouter.post("/register", async (c) => {
   }
   const db2 = c.get("db");
   const id = crypto.randomUUID();
+  const token = await createSessionToken(id);
   try {
     await db2.insert(users).values({
       id,
@@ -17040,11 +17047,13 @@ authRouter.post("/register", async (c) => {
   }
   await db2.update(folders).set({ userId: id }).where(eq(folders.userId, LEGACY_USER_ID));
   await db2.update(feeds).set({ userId: id }).where(eq(feeds.userId, LEGACY_USER_ID));
-  const token = await createSessionToken(id);
   setSessionCookie(c, token);
   return c.json({ id, email: credentials.email }, 201);
 });
 authRouter.post("/login", async (c) => {
+  if (!authConfigured()) {
+    return c.json({ error: "AUTH_SECRET is not set on the server" }, 503);
+  }
   const body = await jsonBody(c);
   if (body === null) return c.json({ error: "Invalid JSON body" }, 400);
   const credentials = parseCredentials(body);

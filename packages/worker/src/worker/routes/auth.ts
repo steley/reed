@@ -37,9 +37,17 @@ async function jsonBody(c: { req: { json: () => Promise<unknown> } }): Promise<u
   }
 }
 
+function authConfigured(): boolean {
+  return Boolean(process.env.AUTH_SECRET);
+}
+
 // POST /api/auth/register — { email, password, code? }. When SIGNUP_CODE is
 // set the body must carry it; unset means registration is open.
 authRouter.post("/register", async (c) => {
+  // Fail before any DB write so a misconfigured server leaves no orphan user
+  if (!authConfigured()) {
+    return c.json({ error: "AUTH_SECRET is not set on the server" }, 503);
+  }
   const body = await jsonBody(c);
   if (body === null) return c.json({ error: "Invalid JSON body" }, 400);
 
@@ -56,6 +64,9 @@ authRouter.post("/register", async (c) => {
 
   const db = c.get("db");
   const id = crypto.randomUUID();
+  // Sign the session before writing anything — an unusable AUTH_SECRET (or any
+  // token-creation failure) must not leave a half-registered user behind.
+  const token = await createSessionToken(id);
   try {
     await db.insert(users).values({
       id,
@@ -76,13 +87,15 @@ authRouter.post("/register", async (c) => {
   await db.update(folders).set({ userId: id }).where(eq(folders.userId, LEGACY_USER_ID));
   await db.update(feeds).set({ userId: id }).where(eq(feeds.userId, LEGACY_USER_ID));
 
-  const token = await createSessionToken(id);
   setSessionCookie(c, token);
   return c.json({ id, email: credentials.email }, 201);
 });
 
 // POST /api/auth/login — { email, password }
 authRouter.post("/login", async (c) => {
+  if (!authConfigured()) {
+    return c.json({ error: "AUTH_SECRET is not set on the server" }, 503);
+  }
   const body = await jsonBody(c);
   if (body === null) return c.json({ error: "Invalid JSON body" }, 400);
   const credentials = parseCredentials(body);

@@ -1894,3 +1894,18 @@ Full multi-user support, zero new dependencies:
    (fresh-start choice from the Neon migration).
 4. Point `TEST_DATABASE_URL` at a throwaway branch and run `pnpm test:run`
    once to exercise the new suites against real Postgres.
+
+### Fix en route: register 500 → 503 + no orphan user
+User hit "Internal server error" on account creation. Likely causes are the
+documented follow-ups (AUTH_SECRET unset → token signing throws after the
+user row was already written; or db:migrate not run → `users` table missing).
+Hardened register/login regardless:
+- register now checks `AUTH_SECRET` up front and returns **503
+  `AUTH_SECRET is not set on the server`** (login likewise) — operator-
+  actionable instead of a blind 500. Naming the env var is a deliberate,
+  documented exception to the generic-500 convention: it leaks nothing and
+  the alternative is undebuggable.
+- the session token is signed **before** any DB write, so a token failure
+  can no longer leave a half-registered user (which would then 409 on the
+  retry).
+Test added: register/login → 503 + zero writes with AUTH_SECRET deleted.

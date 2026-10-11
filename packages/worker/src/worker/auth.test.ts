@@ -222,3 +222,30 @@ describe("auth gate on scoped routes", () => {
     expect(res.status).not.toBe(401);
   });
 });
+
+describe("AUTH_SECRET misconfiguration", () => {
+  it("register and login return 503 and write nothing when AUTH_SECRET is unset", async () => {
+    const saved = process.env.AUTH_SECRET;
+    delete process.env.AUTH_SECRET;
+    try {
+      const register = await app.request("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(REGISTER),
+      });
+      expect(register.status).toBe(503);
+
+      const login = await app.request("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(REGISTER),
+      });
+      expect(login.status).toBe(503);
+
+      const rows = await db.select().from(users);
+      expect(rows).toHaveLength(1); // only the seeded u1
+    } finally {
+      process.env.AUTH_SECRET = saved;
+    }
+  });
+});
