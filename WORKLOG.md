@@ -1909,3 +1909,33 @@ Hardened register/login regardless:
   can no longer leave a half-registered user (which would then 409 on the
   retry).
 Test added: register/login → 503 + zero writes with AUTH_SECRET deleted.
+
+### Fix en route: DB tests against a real Neon branch (first run since the Neon swap)
+The user supplied a throwaway Neon branch (cut from the migrated production
+branch) and the 101 skipped tests ran for the first time. Three latent issues
+surfaced and were fixed:
+- **test-helpers vs pre-migrated branches**: applying concatenated migration
+  SQL onto a branch that already has the schema failed twice — first on
+  multi-command chunks (file boundaries without trailing
+  `statement-breakpoint` glue neighboring statements together; fixed by
+  additionally splitting at line-ending semicolons in `schemaStatements()`),
+  then on history replay (`DROP CONSTRAINT` against an already-migrated DB).
+  `createTestDb` now checks a marker index
+  (`articles_feed_id_url_unique`, created by 0002) and skips schema
+  application when the DB is already current; partial applies tolerate
+  "already exists".
+- **Neon driver ate the fetch mock**: suites stub global fetch to mock feed
+  fetching, and neon-http shares that global — DB queries received the mock
+  (XML parsed as JSON, undefined `.ok`). Fixed by pinning
+  `neonConfig.fetchFunction = fetch.bind(globalThis)` in test-helpers
+  (the singleton the neon-http execute path actually reads; per-instance
+  `neon()` options do not accept fetchFunction).
+- **verifyPassword vacuous-true**: a malformed stored hash `scrypt:zz:zz`
+  hex-decodes to a zero-length buffer; `scryptSync(keylen 0)` returns an
+  empty buffer and `timingSafeEqual([], [])` succeeds. Zero-length hashes
+  are now rejected outright (regression test exists).
+Also: cron.test.ts now seeds its user (FK on feeds.user_id is enforced), and
+the appended multi-user scoping tests in feeds.test.ts create their own
+fixtures instead of relying on other tests' inserts.
+Suite result: 116/116 pass against real Postgres. Branch connection string
+stays out of the repo (env var only).

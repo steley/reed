@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { neon, neonConfig } from "@neondatabase/serverless";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-http";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
@@ -9,6 +9,12 @@ import { createSessionToken } from "./auth.ts";
 // requireAuth signs/verifies JWTs — tests share a fixed secret.
 process.env.AUTH_SECRET ??= "test-secret";
 
+// Pin the driver's HTTP fetch to the real one: suites stub global fetch to
+// mock feed fetching, and the driver shares that global — without this its
+// queries receive the mock (XML responses, undefined .ok). neonConfig is the
+// singleton the neon-http execute path reads fetchFunction from.
+neonConfig.fetchFunction = fetch.bind(globalThis);
+
 const TEST_URL = process.env.TEST_DATABASE_URL?.trim();
 
 let db: NeonHttpDatabase<typeof schema> | undefined;
@@ -16,12 +22,35 @@ let schemaReady: Promise<void> | undefined;
 
 /**
  * neon-http runs one statement per request — split the concatenated
- * migration SQL back into single statements, in file order.
+ * migration SQL back into single statements. The `--> statement-breakpoint`
+ * markers are the primary separator; migrations without a trailing marker
+ * (hand-written files, generated-file boundaries) glue neighboring commands
+ * together, so each chunk is further split at a semicolon that ends a line.
+ * (Semicolons inside string literals would defeat this — none exist in these
+ * migrations; don't add SQL functions here without revisiting.)
  */
 function schemaStatements(): string[] {
   return SCHEMA_SQL.split("--> statement-breakpoint")
+    .flatMap((chunk) => chunk.split(/;(?=\s*\n|$)/))
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/**
+ * The 0002 migration's marker index — present only when the schema is fully
+ * current. Neon branches cut from a migrated production branch carry the
+ * whole schema already; replaying history onto them fails half-way (constraints
+ * already dropped), so detect and skip instead.
+ */
+async function schemaIsCurrent(http: {
+  query: (query: string) => Promise<unknown>;
+}): Promise<boolean> {
+  const res = await http.query(
+    "SELECT 1 FROM pg_indexes WHERE indexname = 'articles_feed_id_url_unique' LIMIT 1",
+  );
+  // neon's .query() resolves to the rows array itself
+  const rows = Array.isArray(res) ? res : ((res as { rows?: unknown[] }).rows ?? []);
+  return rows.length > 0;
 }
 
 /**
@@ -47,8 +76,16 @@ export async function createTestDb(ctx: {
     const http = neon(TEST_URL);
     db = drizzle(http, { schema });
     schemaReady = (async () => {
+      if (await schemaIsCurrent(http)) return;
       for (const statement of schemaStatements()) {
-        await http.query(statement);
+        try {
+          await http.query(statement);
+        } catch (err) {
+          // Tolerate a partially-applied schema ("already exists") but let
+          // anything else fail loudly.
+          if (err instanceof Error && /already exists/i.test(err.message)) continue;
+          throw err;
+        }
       }
     })();
   }

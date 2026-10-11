@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { articles, feeds } from "../db/schema.ts";
-import { createTestDb } from "../lib/test-helpers.ts";
+import { createTestDb, seedUser } from "../lib/test-helpers.ts";
 import { runCron } from "./cron.ts";
 
 // refreshFeed's SSRF guard resolves hostnames — keep it off the network here.
@@ -40,6 +40,7 @@ let db: Awaited<ReturnType<typeof createTestDb>>;
 
 beforeEach(async (ctx) => {
   db = await createTestDb(ctx);
+  await seedUser(db, "u1");
   await db.insert(feeds).values({
     userId: "u1",
     id: "feed-a",

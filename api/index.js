@@ -16951,6 +16951,7 @@ function verifyPassword(password, stored) {
   if (scheme !== "scrypt" || !saltHex || !hashHex) return false;
   try {
     const expected = Buffer.from(hashHex, "hex");
+    if (expected.length === 0) return false;
     const actual = (0, import_node_crypto.scryptSync)(password, Buffer.from(saltHex, "hex"), expected.length);
     return (0, import_node_crypto.timingSafeEqual)(actual, expected);
   } catch {

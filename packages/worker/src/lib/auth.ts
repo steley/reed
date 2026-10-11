@@ -25,6 +25,9 @@ export function verifyPassword(password: string, stored: string): boolean {
   if (scheme !== "scrypt" || !saltHex || !hashHex) return false;
   try {
     const expected = Buffer.from(hashHex, "hex");
+    // A zero-length "hash" would make scryptSync return an empty buffer and
+    // timingSafeEqual succeed vacuously — refuse it.
+    if (expected.length === 0) return false;
     const actual = scryptSync(password, Buffer.from(saltHex, "hex"), expected.length);
     return timingSafeEqual(actual, expected);
   } catch {

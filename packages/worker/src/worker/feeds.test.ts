@@ -280,6 +280,12 @@ describe("DELETE /api/feeds/:id — article cleanup", () => {
 
 describe("multi-user scoping", () => {
   it("only returns the session user's feeds", async () => {
+    await db
+      .insert(feeds)
+      .values({ userId: "u1", id: "f1", url: "https://a.com/feed", createdAt: 1 });
+    await db
+      .insert(feeds)
+      .values({ userId: "u1", id: "f2", url: "https://b.com/feed", createdAt: 2 });
     await seedUser(db, "u2");
     await db
       .insert(feeds)
@@ -291,6 +297,9 @@ describe("multi-user scoping", () => {
   });
 
   it("allows two users to subscribe to the same feed URL", async () => {
+    await db
+      .insert(feeds)
+      .values({ userId: "u1", id: "f1", url: "https://a.com/feed", createdAt: 1 });
     // f1 already holds https://a.com/feed for u1 → duplicate for u1 is 409…
     const dup = await call("/api/feeds", {
       method: "POST",
