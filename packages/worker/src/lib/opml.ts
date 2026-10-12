@@ -18,6 +18,9 @@ const parser = new XMLParser({
   // Match the feed parser's expansion cap — subscription lists with lots of
   // escaped HTML in titles shouldn't fail the 10k default.
   processEntities: { maxTotalExpansions: 100000 },
+  // Numeric entities (&#8211;, &#039;, …) — only the five named XML entities
+  // are decoded without this, and OPML titles keep raw "&amp;#8211;" text.
+  htmlEntities: true,
 });
 
 // Outline children may be single objects or arrays — normalize with toArray.

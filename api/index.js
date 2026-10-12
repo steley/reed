@@ -31316,7 +31316,10 @@ var parser = new import_fast_xml_parser.XMLParser({
   isArray: (name) => ["item", "entry"].includes(name),
   // Raise entity expansion limit — default of 1000 is too low for feeds with
   // rich content:encoded fields containing many escaped HTML entities.
-  processEntities: { maxTotalExpansions: 1e5 }
+  processEntities: { maxTotalExpansions: 1e5 },
+  // Decode numeric entities (&#8211;, &#039;, …) — without this only the five
+  // named XML entities are decoded and titles keep raw "&amp;#8211;" text.
+  htmlEntities: true
 });
 function parseFeed2(xml) {
   let parsed;
@@ -31877,7 +31880,10 @@ var parser2 = new import_fast_xml_parser2.XMLParser({
   attributeNamePrefix: "@_",
   // Match the feed parser's expansion cap — subscription lists with lots of
   // escaped HTML in titles shouldn't fail the 10k default.
-  processEntities: { maxTotalExpansions: 1e5 }
+  processEntities: { maxTotalExpansions: 1e5 },
+  // Numeric entities (&#8211;, &#039;, …) — only the five named XML entities
+  // are decoded without this, and OPML titles keep raw "&amp;#8211;" text.
+  htmlEntities: true
 });
 function toArray(value) {
   if (value === void 0 || value === null) return [];

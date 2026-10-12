@@ -183,6 +183,23 @@ describe("parseFeed — edge cases", () => {
     expect(result!.articles).toHaveLength(1);
     expect(result!.articles[0]!.content).toContain("<p>text</p>");
   });
+
+  it("decodes numeric HTML entities in titles", () => {
+    const feed = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Foo &#8211; Bar</title>
+    <link>https://example.com</link>
+    <item>
+      <title>It&#039;s &#039;quoted&#039;</title>
+      <link>https://example.com/a</link>
+    </item>
+  </channel>
+</rss>`;
+    const result = parseFeed(feed);
+    expect(result!.meta.title).toBe("Foo – Bar");
+    expect(result!.articles[0]!.title).toBe("It's 'quoted'");
+  });
 });
 
 describe("parseFeed — Atom link rel fallback", () => {

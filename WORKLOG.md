@@ -2375,3 +2375,38 @@ only the feeds table changed.
 - Only `article?.id` as the effect dep — depending on `article` itself would
   reset scroll when the summary → full-content swap lands, jumping the
   reader back to the top of an article being read.
+
+---
+
+## Fix: numeric HTML entities left raw in feed/OPML titles
+**Date:** 2026-10-12
+**Status:** Complete
+
+### What was built
+- Bug report (zh): feed titles showed raw `&#8211;` / `&#039;` instead of
+  `–` / `'`.
+- Root cause: fast-xml-parser only decodes the five named XML entities
+  (`&amp;` `&lt;` `&gt;` `&quot;` `&apos;`) by default. Numeric and named
+  HTML entities (`&#8211;`, `&#039;`, `&mdash;`, …) live in its
+  `htmlEntities` table, which is **off unless `htmlEntities: true`** —
+  independent of `processEntities`. Both parsers passed an object form of
+  `processEntities` (assuming that covered decoding) and no `htmlEntities`.
+- Fix: one line in each of `lib/parse.ts` and `lib/opml.ts`
+  (`htmlEntities: true`). Regression test added to `parse.test.ts`
+  (`Foo &#8211; Bar` → `Foo – Bar`).
+
+### Options considered and discarded
+- Post-decoding titles/summaries ourselves (a `decodeEntities()` helper or
+  DOM-based trick): wrong layer, we'd be re-implementing what the parser
+  option does, and summaries/content would still need double-unescaping
+  care.
+- Upgrading fast-xml-parser: not a version bug — behavior is by design in
+  4.5.5 (numeric entities sit behind the `htmlEntities` flag).
+
+### Gotchas
+- Stored rows self-heal: `refreshFeed()` rewrites feed titles (and upserts
+  article titles) on every hourly cron, so no one-off data migration is
+  needed — existing titles decode on the next refresh.
+- `processEntities` in 4.5.5 accepts `{ maxTotalExpansions, … }` and the
+  OptionsBuilder normalizes it with `enabled` defaulting to true — the
+  expansion-limit config was working fine; only HTML entities were missing.

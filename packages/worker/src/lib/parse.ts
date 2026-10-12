@@ -8,6 +8,9 @@ const parser = new XMLParser({
   // Raise entity expansion limit — default of 1000 is too low for feeds with
   // rich content:encoded fields containing many escaped HTML entities.
   processEntities: { maxTotalExpansions: 100000 },
+  // Decode numeric entities (&#8211;, &#039;, …) — without this only the five
+  // named XML entities are decoded and titles keep raw "&amp;#8211;" text.
+  htmlEntities: true,
 });
 
 /**

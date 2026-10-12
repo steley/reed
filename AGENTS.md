@@ -90,7 +90,7 @@ reed/
 | Database | Neon (PostgreSQL) | Serverless Postgres over HTTP (`@neondatabase/serverless`, neon-http: one stateless HTTPS request per query — no sockets, no pooling), identical from Vercel + GitHub Actions + local dev |
 | ORM | Drizzle ORM + drizzle-kit | Type-safe queries, `postgresql` dialect for migrations |
 | HTTP router | Hono | Lightweight, typed routing; `app.request()` enables clean unit tests; `hono/vercel` adapter for the serverless entry |
-| RSS parsing | `fast-xml-parser` | Pure JS, no native deps, handles RSS 2.0 + Atom |
+| RSS parsing | `fast-xml-parser` | Pure JS, no native deps, handles RSS 2.0 + Atom. Both parsers (`lib/parse.ts`, `lib/opml.ts`) must set `htmlEntities: true` — without it only the five named XML entities decode and numeric ones (`&#8211;`, `&#039;`) stay raw in titles |
 | Full-text extraction | `@mozilla/readability` + `linkedom` | Firefox reader mode over a lightweight DOM (jsdom rejected: too heavy for the serverless bundle) — fetches article pages when a feed only summarizes |
 | Markdown rendering | `marked` | Converts markdown content to HTML for feeds that provide markdown bodies |
 | Frontend | React 19 + Vite | Standard SPA setup |
