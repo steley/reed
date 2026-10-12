@@ -2410,3 +2410,41 @@ only the feeds table changed.
 - `processEntities` in 4.5.5 accepts `{ maxTotalExpansions, … }` and the
   OptionsBuilder normalizes it with `enabled` defaulting to true — the
   expansion-limit config was working fine; only HTML entities were missing.
+
+## Increment — Article retention: 90-day auto-prune
+**Date:** 2026-10-12
+**Status:** Complete
+
+### What was built
+- `refreshFeed()` now prunes articles older than 90 days after each successful
+  refresh (`packages/worker/src/lib/refresh.ts`). Deletion is keyed on
+  `createdAt` (always present), scoped to the feed just refreshed, and uses
+  `.returning()` to count rows.
+- `RefreshResult` gained a `pruned: number` field (`@reed/types`), surfaced by
+  POST /api/feeds/:id/refresh and the hourly Actions cron.
+- `api/index.js` rebuilt via `pnpm build:api`.
+
+### Decisions made
+- **Prune inside `refreshFeed()`, not a separate sweep:** the hourly Actions
+  cron already calls it for every feed, so retention is enforced without a new
+  job or endpoint. Deleted per-feed right after upserts.
+- **Key on `createdAt`, not `publishedAt`:** `publishedAt` is nullable and some
+  feeds emit bogus dates; `createdAt` reflects when we actually ingested the
+  row. A 90-day-old article the feed re-publishes tomorrow gets re-inserted
+  fresh — acceptable for a retention window.
+
+### Options considered and discarded
+- **Global DELETE sweep in the cron script:** would work but touches every
+  row table-wide in one go; per-feed pruning spreads the load and self-heals
+  new feeds automatically.
+- **Keep unread/starred articles forever:** rejected — user asked for a plain
+  90-day window. No `starred` field exists yet anyway; if one is added, revisit.
+- **Env-configurable retention (e.g. `RETENTION_DAYS`):** overkill for a
+  personal app; a named constant is enough. Change it in one place if needed.
+
+### Gotchas
+- `lt(articles.createdAt, cutoff)` — Drizzle needs the numeric epoch-millis
+  comparison against the `bigint` column; works as-is in neon-http mode.
+- Existing tests assert refresh response fields individually, so the added
+  `pruned` field breaks nothing (verified: full suite passes, DB tests skipped
+  locally without `TEST_DATABASE_URL`).

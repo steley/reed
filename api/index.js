@@ -31440,6 +31440,7 @@ var MAX_RESPONSE_BYTES = 5e6;
 var MAX_REDIRECTS = 5;
 var MIN_FULLTEXT_CHARS = 500;
 var FULLTEXT_POOL = 4;
+var ARTICLE_RETENTION_DAYS = 90;
 function assertFetchableUrl(url) {
   let parsed;
   try {
@@ -31595,7 +31596,9 @@ async function refreshFeed(feedId, db2) {
       updated++;
     }
   }
-  return { added, updated };
+  const cutoff = Date.now() - ARTICLE_RETENTION_DAYS * 24 * 60 * 60 * 1e3;
+  const pruned = await db2.delete(articles).where(and(eq(articles.feedId, feedId), lt(articles.createdAt, cutoff))).returning({ id: articles.id });
+  return { added, updated, pruned: pruned.length };
 }
 
 // src/worker/routes/feeds.ts

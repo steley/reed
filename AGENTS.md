@@ -335,6 +335,15 @@ summary counts as a readable body and skips fetching), `extractFullText()`
   reads `DATABASE_URL`; idempotent — rows with content ≥ 500 chars are
   skipped, failures can be retried by re-running).
 
+### Article retention (2026-10-12)
+`refreshFeed()` prunes articles older than 90 days (`ARTICLE_RETENTION_DAYS`
+in `lib/refresh.ts`) after each successful refresh, scoped to the feed just
+refreshed — the hourly cron enforces retention with no separate sweep job.
+Deletion is keyed on `createdAt` (ingestion time), not `publishedAt` (nullable
+and sometimes bogus). The refresh response's `RefreshResult.pruned` reports
+rows deleted. If a "starred"/saved-forever feature is ever added, exempt it
+from this delete or users lose saved articles.
+
 ### Feed fetch guardrails (SSRF)
 Feed URLs are untrusted input (anyone who can reach the unauthenticated API can
 register one). `refreshFeed()` validates before every fetch hop via

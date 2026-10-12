@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
-import { and, eq } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import type { ParsedArticle, RefreshResult } from "@reed/types";
 import type { DB } from "../db/client.ts";
 import { articles, feeds } from "../db/schema.ts";
@@ -15,6 +15,8 @@ const MAX_REDIRECTS = 5;
 const MIN_FULLTEXT_CHARS = 500;
 // Concurrent article-page fetches during full-text prefetch.
 const FULLTEXT_POOL = 4;
+// Articles older than this (by createdAt) are pruned after each refresh.
+const ARTICLE_RETENTION_DAYS = 90;
 
 /**
  * Validate a feed URL's scheme. Called at feed-insert time (400 to the client)
@@ -245,5 +247,15 @@ export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult
     }
   }
 
-  return { added, updated };
+  // Prune articles older than the retention window. Keyed on createdAt
+  // (always present), not publishedAt (nullable and sometimes wrong). Runs
+  // per-feed after every successful refresh, so the hourly Actions cron
+  // keeps every feed within the window without a separate sweep job.
+  const cutoff = Date.now() - ARTICLE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const pruned = await db
+    .delete(articles)
+    .where(and(eq(articles.feedId, feedId), lt(articles.createdAt, cutoff)))
+    .returning({ id: articles.id });
+
+  return { added, updated, pruned: pruned.length };
 }

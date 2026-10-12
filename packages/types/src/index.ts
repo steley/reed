@@ -109,6 +109,8 @@ export interface UpdateArticle {
 export interface RefreshResult {
   added: number;
   updated: number;
+  /** Articles deleted for exceeding the 90-day retention window. */
+  pruned: number;
 }
 
 // ---------------------------------------------------------------------------
