@@ -1,5 +1,5 @@
 import type { Article, Feed } from "@reed/types";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { feedDisplayName, fullDate } from "../lib/display.ts";
 import { renderArticleHtml } from "../lib/render.ts";
 import { ArrowLeft, External, MarkUnread } from "./icons.tsx";
@@ -16,6 +16,17 @@ export function ArticleReader({ article, feed, onBack, onMarkRead }: Props) {
     if (!article) return "";
     return renderArticleHtml(article.content ?? article.summary ?? "");
   }, [article]);
+
+  const scrollRef = useRef<HTMLElement>(null);
+
+  // reset scroll when a different article opens, else the reader keeps the
+  // previous article's scroll offset and lands mid/end of the new one.
+  // Keyed on id, not the object: the full-body refetch swap must not reset
+  // scroll mid-read.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: id-keyed by design
+  useEffect(() => {
+    scrollRef.current?.scrollTo(0, 0);
+  }, [article?.id]);
 
   if (!article) {
     return (
@@ -71,7 +82,7 @@ export function ArticleReader({ article, feed, onBack, onMarkRead }: Props) {
       </header>
 
       {/* Article */}
-      <article className="min-h-0 flex-1 overflow-y-auto">
+      <article ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[680px] px-6 pb-24 pt-4 md:px-8">
           <h1 className="text-[26px] font-bold leading-tight tracking-tight text-ink md:text-[30px]">
             {article.title ?? "(untitled)"}

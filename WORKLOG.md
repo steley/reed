@@ -2344,3 +2344,34 @@ only the feeds table changed.
   OPML, article GET by id) + session-requirement note.
 - Deployment section now mentions `AUTH_SECRET` alongside `DATABASE_URL`.
 - Roadmap: Phase 3 auth marked shipped (2026-10-11), CLI tool remaining.
+
+---
+
+## Fix: reader scroll position persists across articles
+**Date:** 2026-10-12
+**Status:** Complete
+
+### What was built
+- Bug report (zh): after reading article 1 to the bottom, opening article 2
+  landed at article 2's end instead of its top.
+- Root cause: the reader pane's scroll container is the persistent `<article
+  class="overflow-y-auto">` element in `ArticleReader` — React keeps the same
+  DOM node when `article` changes, and browsers preserve a scroll container's
+  offset when only its content swaps. Reading article 1 to its end left the
+  container scrolled; article 2 rendered into that scrolled position.
+- Fix: `scrollRef` on the `<article>` + a `useEffect` keyed on
+  `article?.id` that runs `scrollTo(0, 0)`. Keyed on id (not the object) so
+  the full-article refetch swap (`fullCache` landing) doesn't reset a
+  reader's scroll mid-read.
+
+### Options considered and discarded
+- Remounting the reader per article via a `key={article.id}` on the
+  component: would work but discards the whole subtree on every selection;
+  the effect is four lines.
+- Per-article scroll restoration (remember each article's offset): YAGNI,
+  never requested.
+
+### Gotchas
+- Only `article?.id` as the effect dep — depending on `article` itself would
+  reset scroll when the summary → full-content swap lands, jumping the
+  reader back to the top of an article being read.
