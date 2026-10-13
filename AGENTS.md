@@ -24,6 +24,10 @@ These rules are mandatory. Follow them on every task without exception.
    lint → type-check → tests. All three must pass. If tests fail, fix them
    before committing — do not skip with `--no-verify`.
 
+3b. **Commit messages use Conventional Commits prefixes** — `feat:`, `fix:`,
+   `docs:`, `chore:`, `refactor:` — matching the dominant style of the history.
+   Do not drop the prefix.
+
 4. **Read `WORKLOG.md` before starting any task.** It contains decisions
    already made and dead ends already explored. Do not re-litigate settled
    decisions without a good reason.
