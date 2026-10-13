@@ -2559,3 +2559,35 @@ only the feeds table changed.
   shortcuts, feed health indicator. Also corrected "Resizable three-pane
   layout" → collapsible (the panes were never drag-resizable; sidebar is
   fixed w-64).
+
+## Increment — Public landing page (hash-routed, unauthenticated)
+**Date:** 2026-10-13
+**Status:** Complete
+
+### What was built
+- `packages/app/src/components/Landing.tsx` — public landing page shown to
+  unauthenticated visitors: top bar (ReedMark + "Sign in" link top-right),
+  hero ("Read your RSS in peace"), a 2×2 features grid ("Small, on purpose"),
+  and a keyboard-shortcuts table ("Keyboard first"). All copy in English.
+- `App.tsx` — unauthenticated gate is now hash-routed: `#/login` shows the
+  Login form, anything else shows Landing. A `hashchange` listener keeps
+  back/forward working. Authenticated flow unchanged.
+
+### Decisions made
+- **Hash routing over react-router:** the app has no router dependency and
+  only needs two unauthenticated views; a hash state + listener (~10 lines)
+  beats adding a dependency and a provider for one conditional.
+- **Feature/shortcut copy strictly limited to shipped behavior:** reader-mode
+  full-text extraction, folders + OPML import, feed-health flag, dark mode;
+  shortcuts j/k, v, r only. Nothing marketed that the app can't do.
+- **"Sign in" instead of a signup CTA on the hero:** Login.tsx already
+  combines login/register in one form, so one entry point is enough.
+- Landing styles reuse existing design tokens (bg-canvas/bg-panel/border-line/
+  text-ink-3/bg-accent) so dark mode works with zero extra CSS.
+
+### Gotchas
+- Dev environment: `pnpm dev` starts only the API (port 8787, where `/`
+  returns `{"error":"Not found"}` — expected). The frontend is
+  `pnpm --filter @reed/app dev` on :5173, which proxies `/api` → 8787.
+- Biome `useJsxKeyInIterable` flagged the two `.map()`s in Landing; fixed
+  with `key={f.title}` / `key={k}`.

@@ -5,6 +5,7 @@ import { ArticleList } from "./components/ArticleList.tsx";
 import { ArticleReader } from "./components/ArticleReader.tsx";
 import { FeedSidebar } from "./components/FeedSidebar.tsx";
 import { ImportOpmlDialog } from "./components/ImportOpmlDialog.tsx";
+import { Landing } from "./components/Landing.tsx";
 import { Login } from "./components/Login.tsx";
 import { NameDialog } from "./components/NameDialog.tsx";
 import {
@@ -49,6 +50,14 @@ export function App() {
   const [isDark, setIsDark] = useState(() => localStorage.getItem(THEME_KEY) === "dark");
   // null = session check in flight; false = show the login gate
   const [authed, setAuthed] = useState<boolean | null>(null);
+  // Unauthenticated views are hash-routed: #/login shows the login form,
+  // anything else shows the landing page. Back/forward works for free.
+  const [route, setRoute] = useState(() => window.location.hash);
+  useEffect(() => {
+    const onHash = () => setRoute(window.location.hash);
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   // Any 401 from any API call drops the app back to the login screen
   useEffect(() => {
@@ -440,7 +449,9 @@ export function App() {
   }, []);
 
   if (authed === null) return null;
-  if (!authed) return <Login onAuthed={() => setAuthed(true)} />;
+  if (!authed) {
+    return route === "#/login" ? <Login onAuthed={() => setAuthed(true)} /> : <Landing />;
+  }
 
   return (
     <div className="flex h-dvh overflow-hidden bg-canvas text-ink">
