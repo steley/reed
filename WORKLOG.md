@@ -2551,3 +2551,11 @@ only the feeds table changed.
   reader now takes a `wide` prop (= sidebarCollapsed); the cap becomes
   944px (680 + 264px sidebar) with a 200ms max-width transition. Expanded
   state keeps the original 680px measure.
+
+### Follow-up — README Features sync (2026-10-13)
+- Features list was stale. Added: search-term highlighting, unread-only
+  filter + badges + recency float-up, full-text extraction (Readability),
+  collapsible sidebar (this session), reader font-size control, keyboard
+  shortcuts, feed health indicator. Also corrected "Resizable three-pane
+  layout" → collapsible (the panes were never drag-resizable; sidebar is
+  fixed w-64).

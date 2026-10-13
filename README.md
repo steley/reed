@@ -17,13 +17,17 @@ A personal RSS reader built on Vercel (Hono), Neon (PostgreSQL), and GitHub Acti
 - OPML import/export
 - Add RSS 2.0 and Atom feeds by URL
 - Hourly background refresh via GitHub Actions; manual refresh-all or per-feed
-- Full-text search across article titles and bodies (Postgres pg_trgm)
+- Full-text search across article titles and bodies (Postgres pg_trgm), with matched terms highlighted in the list
 - Read/unread tracking, auto-mark-read on open; mark all as read per feed or globally
+- Unread-only filter toggle and unread-count badges; feeds with fresh unread articles float up in the sidebar
 - Sort articles newest or oldest first
-- Markdown and HTML article content rendering
+- Markdown and HTML article content rendering; full-text extraction for feeds that only summarize (Readability)
 - Article titles link to original posts
 - Dark/light mode toggle (defaults to light mode)
-- Resizable three-pane layout: feed sidebar, article list, article reader
+- Three-pane layout with a collapsible feed sidebar (state persisted; collapses to the article list + reader on desktop, drawer on mobile)
+- Adjustable reader text size (Aa button)
+- Keyboard shortcuts: `j`/`k` or arrow keys to navigate, `v` to open the original post, `r` to refresh
+- Feed health indicator: failing feeds show a red dot with the last error on hover
 - REST API is fully `curl`-able — all data endpoints accept `Authorization: Bearer <jwt>` in addition to the session cookie
 
 ---
