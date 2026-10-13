@@ -2544,3 +2544,10 @@ only the feeds table changed.
 - The `Menu` icon import in ArticleList was swapped for `PanelLeft`; `Menu`
   is still used nowhere else in the app after this (kept in icons.tsx for
   potential reuse).
+
+### Follow-up — reader measure width (2026-10-13)
+- Collapsing the sidebar didn't change the reader: the article column was
+  hard-capped at `max-w-[680px]`, so the freed width became whitespace. The
+  reader now takes a `wide` prop (= sidebarCollapsed); the cap becomes
+  944px (680 + 264px sidebar) with a 200ms max-width transition. Expanded
+  state keeps the original 680px measure.

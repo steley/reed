@@ -9,6 +9,9 @@ interface Props {
   feed: Feed | null;
   onBack(): void; // mobile: return to list
   onMarkRead(id: string, read: boolean): void;
+  // Desktop sidebar collapsed: the reader pane gains the sidebar's width, so
+  // the text measure widens to use it instead of growing whitespace margins.
+  wide?: boolean;
 }
 
 // Reader font-size steps, cycled by the Aa toolbar button. Values are CSS
@@ -38,7 +41,7 @@ function SanitizedBody({ html, fontSize }: { html: string; fontSize: string }) {
   );
 }
 
-export function ArticleReader({ article, feed, onBack, onMarkRead }: Props) {
+export function ArticleReader({ article, feed, onBack, onMarkRead, wide = false }: Props) {
   const [readerSize, setReaderSize] = useState<ReaderSize>(loadReaderSize);
 
   const cycleReaderSize = () => {
@@ -134,7 +137,13 @@ export function ArticleReader({ article, feed, onBack, onMarkRead }: Props) {
 
       {/* Article */}
       <article ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[680px] px-6 pb-24 pt-4 md:px-8">
+        {/* 680px measure normally; 944px (680 + sidebar width) when the
+            sidebar is collapsed so the freed width goes to the text */}
+        <div
+          className={`mx-auto px-6 pb-24 pt-4 transition-[max-width] duration-200 md:px-8 ${
+            wide ? "max-w-[944px]" : "max-w-[680px]"
+          }`}
+        >
           <h1 className="text-[26px] font-bold leading-tight tracking-tight text-ink md:text-[30px]">
             {article.title ?? "(untitled)"}
           </h1>

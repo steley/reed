@@ -505,6 +505,7 @@ export function App() {
           feed={selectedArticleFeed}
           onBack={() => setSelectedArticleId(null)}
           onMarkRead={handleMarkRead}
+          wide={sidebarCollapsed}
         />
       </div>
 
