@@ -2448,3 +2448,36 @@ only the feeds table changed.
 - Existing tests assert refresh response fields individually, so the added
   `pruned` field breaks nothing (verified: full suite passes, DB tests skipped
   locally without `TEST_DATABASE_URL`).
+
+## Increment — Keyboard shortcuts: v (open original) and r (refresh)
+**Date:** 2026-10-13
+**Status:** Complete
+
+### What was built
+- Two new global shortcuts in `App.tsx`, folded into the existing j/k keydown
+  listener (same typing/dialog guards):
+  - `v` — opens the selected article's original page (`article.url`) in a new
+    tab via `window.open(url, "_blank", "noopener")`. No-op when nothing is
+    selected.
+  - `r` — triggers `handleRefresh()`, exactly the toolbar button's behavior:
+    refreshes the selected feed (or all feeds when "All" is active), reloads
+    the article list and unread badges.
+
+### Decisions made
+- **Extend the one listener rather than adding a second:** the guards (ignore
+  typing targets, ignore when a dialog is open, ignore modifier combos) are
+  identical; two listeners would just duplicate them.
+- **`noopener` on window.open:** the new tab can't touch `window.opener` —
+  third-party article pages are untrusted content.
+- **`r` reuses `handleRefresh` instead of a lighter "reload list" path:** the
+  toolbar button's semantics (server-side re-fetch + list + badges) is what a
+  user means by refresh; a list-only reload would silently diverge.
+- Esc-to-close-dialogs was considered and deliberately dropped — dialogs are
+  three low-frequency forms; user chose v/r only.
+
+### Gotchas
+- `v` works off `selectedArticle` (full body or summary fallback), so it fires
+  the instant an article is selected, before the full fetch lands.
+- The listener effect is defined before the early returns, so it also mounts on
+  the login screen — but the INPUT guard covers the login form, and an unauthed
+  refresh just 401s into the existing auth-drop path, harmlessly.

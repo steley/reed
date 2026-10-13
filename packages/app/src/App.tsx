@@ -313,13 +313,23 @@ export function App() {
     setSidebarOpen(false);
   }, []);
 
-  // Keyboard navigation: j / ArrowDown = next article, k / ArrowUp = previous,
-  // walking the exact visible list order (sortArticles). Skipped while typing
-  // or when a dialog is open. No j/k on the sidebar — articles only, per j/k
-  // reader convention.
+  // Keyboard shortcuts, all skipped while typing or when a dialog is open:
+  // - j / ArrowDown = next article, k / ArrowUp = previous, walking the exact
+  //   visible list order (sortArticles). No j/k on the sidebar — articles
+  //   only, per j/k reader convention.
+  // - v = open the selected article's original page in a new tab.
+  // - r = refresh the current view (same as the toolbar button).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "j" && e.key !== "k" && e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      if (
+        e.key !== "j" &&
+        e.key !== "k" &&
+        e.key !== "ArrowDown" &&
+        e.key !== "ArrowUp" &&
+        e.key !== "v" &&
+        e.key !== "r"
+      )
+        return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
       if (
@@ -329,6 +339,16 @@ export function App() {
         return;
       }
       if (addFeedOpen || importOpmlOpen || folderDialog) return;
+      if (e.key === "v") {
+        if (selectedArticle?.url) {
+          window.open(selectedArticle.url, "_blank", "noopener");
+        }
+        return;
+      }
+      if (e.key === "r") {
+        void handleRefresh();
+        return;
+      }
       const sorted = sortArticles(articles, sortAsc);
       const idx = sorted.findIndex((a) => a.id === selectedArticleId);
       // Nothing selected yet: j starts at the top, k at the bottom
@@ -347,11 +367,13 @@ export function App() {
   }, [
     articles,
     selectedArticleId,
+    selectedArticle,
     sortAsc,
     addFeedOpen,
     importOpmlOpen,
     folderDialog,
     handleSelectArticle,
+    handleRefresh,
   ]);
 
   const handleAddFolder = useCallback(async (name: string) => {
