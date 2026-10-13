@@ -2481,3 +2481,34 @@ only the feeds table changed.
 - The listener effect is defined before the early returns, so it also mounts on
   the login screen — but the INPUT guard covers the login form, and an unauthed
   refresh just 401s into the existing auth-drop path, harmlessly.
+
+## Increment — Reader font-size control (Aa button)
+**Date:** 2026-10-13
+**Status:** Complete
+
+### What was built
+- Three-step reader text size (sm 15px / md 17px = historical default / lg 20px),
+  cycled by an `Aa` button in the reader toolbar (icon size hints the current
+  step). Persisted in localStorage under `reed-reader-size`.
+- `app.css`: `.article-body` h1/h2/h3 switched from rem to em so headings
+  scale with the body size; everything else (tables, code, pre) was already em.
+
+### Decisions made
+- **Inline style on `.article-body` instead of a CSS var/class:** three known
+  steps, one consumer — a Record<step, cssValue> lookup is simpler than adding
+  a token to the Tailwind theme.
+- **Only the article body scales, not the page title / byline:** the title is
+  layout chrome; body text is what people adjust for reading comfort.
+- **Cycling button over a dropdown:** three steps don't warrant a popover; one
+  tap to the next size is faster.
+- **`SanitizedBody` extraction gotcha:** biome format expands long JSX to
+  multiline, which breaks the biome-ignore suppression adjacency for
+  `dangerouslySetInnerHTML` (diagnostic lands on the prop line, the comment
+  stays above the element). A small single-line wrapper component keeps the
+  suppression permanently adjacent. Considered putting the suppression in
+  biome.json (global disable) — too broad.
+
+### Gotchas
+- `noUncheckedIndexedAccess` makes `READER_SIZES[...]` possibly-undefined;
+  modulo indexing needs a `?? "md"` fallback even though the logic guarantees
+  a hit.

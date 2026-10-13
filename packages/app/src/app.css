@@ -37,6 +37,8 @@ body {
  * ------------------------------------------------------------------------- */
 .article-body {
   font-family: Georgia, "Iowan Old Style", "Times New Roman", "Songti SC", "Noto Serif SC", serif;
+  /* Reader font-size control (ArticleReader.tsx) overrides this inline;
+     nested .article-body rules use em so they scale with it */
   font-size: 1.0625rem;
   line-height: 1.85;
   color: var(--color-ink);
@@ -57,13 +59,13 @@ body {
 }
 
 .article-body h1 {
-  font-size: 1.5rem;
+  font-size: 1.5em;
 }
 .article-body h2 {
-  font-size: 1.3rem;
+  font-size: 1.3em;
 }
 .article-body h3 {
-  font-size: 1.125rem;
+  font-size: 1.125em;
 }
 
 .article-body a {

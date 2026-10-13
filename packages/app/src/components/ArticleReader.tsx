@@ -1,5 +1,5 @@
 import type { Article, Feed } from "@reed/types";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { feedDisplayName, fullDate } from "../lib/display.ts";
 import { renderArticleHtml } from "../lib/render.ts";
 import { ArrowLeft, External, MarkUnread } from "./icons.tsx";
@@ -11,7 +11,45 @@ interface Props {
   onMarkRead(id: string, read: boolean): void;
 }
 
+// Reader font-size steps, cycled by the Aa toolbar button. Values are CSS
+// font-sizes applied inline to .article-body (nested rules use em, so
+// headings/tables scale along). "md" is the historical default (1.0625rem).
+const READER_SIZES = ["sm", "md", "lg"] as const;
+type ReaderSize = (typeof READER_SIZES)[number];
+const READER_SIZE_KEY = "reed-reader-size";
+const READER_SIZE_CSS: Record<ReaderSize, string> = {
+  sm: "0.9375rem",
+  md: "1.0625rem",
+  lg: "1.25rem",
+};
+
+function loadReaderSize(): ReaderSize {
+  const stored = localStorage.getItem(READER_SIZE_KEY);
+  return READER_SIZES.includes(stored as ReaderSize) ? (stored as ReaderSize) : "md";
+}
+
+// Single-line wrapper so the biome-ignore suppression stays adjacent to the
+// dangerouslySetInnerHTML line even after biome format expands the reader
+// markup around it.
+function SanitizedBody({ html, fontSize }: { html: string; fontSize: string }) {
+  return (
+    // biome-ignore lint/security/noDangerouslySetInnerHtml: rendered via lib/render.ts, sanitized via DOMPurify (lib/sanitize.ts)
+    <div className="article-body" style={{ fontSize }} dangerouslySetInnerHTML={{ __html: html }} />
+  );
+}
+
 export function ArticleReader({ article, feed, onBack, onMarkRead }: Props) {
+  const [readerSize, setReaderSize] = useState<ReaderSize>(loadReaderSize);
+
+  const cycleReaderSize = () => {
+    setReaderSize((current) => {
+      const idx = READER_SIZES.indexOf(current);
+      const next = READER_SIZES[(idx + 1) % READER_SIZES.length] ?? "md";
+      localStorage.setItem(READER_SIZE_KEY, next);
+      return next;
+    });
+  };
+
   const html = useMemo(() => {
     if (!article) return "";
     return renderArticleHtml(article.content ?? article.summary ?? "");
@@ -62,6 +100,19 @@ export function ArticleReader({ article, feed, onBack, onMarkRead }: Props) {
         <div className="flex-1" />
         <button
           type="button"
+          onClick={cycleReaderSize}
+          title={`Text size: ${readerSize}`}
+          aria-label={`Text size: ${readerSize}`}
+          className="flex items-center rounded-lg px-2.5 py-1.5 text-[13px] leading-none text-ink-2 transition-colors hover:bg-card hover:text-ink"
+        >
+          <span
+            className={`font-medium ${readerSize === "sm" ? "text-[12px]" : readerSize === "lg" ? "text-[17px]" : "text-[14px]"}`}
+          >
+            Aa
+          </span>
+        </button>
+        <button
+          type="button"
           onClick={() => onMarkRead(article.id, false)}
           title="Mark as unread"
           className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] text-ink-2 transition-colors hover:bg-card hover:text-ink"
@@ -97,8 +148,7 @@ export function ArticleReader({ article, feed, onBack, onMarkRead }: Props) {
             <span>{fullDate(article.publishedAt)}</span>
           </p>
           <hr className="my-7 border-line" />
-          {/* biome-ignore lint/security/noDangerouslySetInnerHtml: rendered via lib/render.ts, sanitized via DOMPurify (lib/sanitize.ts) */}
-          <div className="article-body" dangerouslySetInnerHTML={{ __html: html }} />
+          <SanitizedBody html={html} fontSize={READER_SIZE_CSS[readerSize]} />
         </div>
       </article>
     </div>
