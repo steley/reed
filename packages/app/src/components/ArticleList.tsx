@@ -7,7 +7,7 @@ import {
   relativeTime,
   sortArticles,
 } from "../lib/display.ts";
-import { Filter, MarkAllRead, Menu, Refresh, Sort } from "./icons.tsx";
+import { Filter, MarkAllRead, PanelLeft, Refresh, Sort } from "./icons.tsx";
 
 /** Render `text` with the search tokens wrapped in <mark>. */
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -40,8 +40,9 @@ interface Props {
   unreadOnly: boolean;
   searchQuery: string;
   onSearchChange(query: string): void;
-  // mobile: show as full screen list (article not selected)
-  onOpenMenu(): void;
+  // Toggle the sidebar: collapses/restores it on desktop, opens the drawer on
+  // mobile (the App-side handler picks the right behavior per breakpoint)
+  onToggleSidebar(): void;
   onSelectArticle(id: string): void;
   onToggleSort(): void;
   onToggleUnread(): void;
@@ -60,7 +61,7 @@ export function ArticleList({
   unreadOnly,
   searchQuery,
   onSearchChange,
-  onOpenMenu,
+  onToggleSidebar,
   onSelectArticle,
   onToggleSort,
   onToggleUnread,
@@ -84,11 +85,12 @@ export function ArticleList({
       <header className="flex items-center gap-2 border-b border-line px-4 py-3.5 md:px-5">
         <button
           type="button"
-          onClick={onOpenMenu}
-          aria-label="Open menu"
-          className="-ml-1 rounded-lg p-1.5 text-ink-2 hover:bg-card hover:text-ink md:hidden"
+          onClick={onToggleSidebar}
+          aria-label="Toggle sidebar"
+          title="Toggle sidebar"
+          className="-ml-1 rounded-lg p-1.5 text-ink-3 hover:bg-card hover:text-ink"
         >
-          <Menu width={17} height={17} />
+          <PanelLeft width={17} height={17} />
         </button>
         <h1 className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-tight">
           {selectedFeed ? feedDisplayName(selectedFeed) : "All articles"}

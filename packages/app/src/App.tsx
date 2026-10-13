@@ -38,6 +38,10 @@ export function App() {
     initial: string;
   } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false); // mobile drawer
+  // Desktop sidebar collapse, persisted. Mobile (drawer) ignores this.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem("reed-sidebar") === "collapsed",
+  );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sortAsc, setSortAsc] = useState(false);
   // Server-side unread filter for the article list; default on
@@ -313,6 +317,20 @@ export function App() {
     setSidebarOpen(false);
   }, []);
 
+  // Sidebar toggle from the list header: collapses/restores the sidebar on
+  // desktop, opens the mobile drawer below md. Collapse state persists.
+  const handleToggleSidebar = useCallback(() => {
+    if (window.matchMedia("(min-width: 768px)").matches) {
+      setSidebarCollapsed((c) => {
+        const next = !c;
+        localStorage.setItem("reed-sidebar", next ? "collapsed" : "open");
+        return next;
+      });
+    } else {
+      setSidebarOpen(true);
+    }
+  }, []);
+
   // Keyboard shortcuts, all skipped while typing or when a dialog is open:
   // - j / ArrowDown = next article, k / ArrowUp = previous, walking the exact
   //   visible list order (sortArticles). No j/k on the sidebar — articles
@@ -435,6 +453,7 @@ export function App() {
         totalUnread={totalUnread}
         isDark={isDark}
         open={sidebarOpen}
+        collapsed={sidebarCollapsed}
         onSelectFeed={handleSelectFeed}
         onAddFeed={() => setAddFeedOpen(true)}
         onAddFolder={() => setFolderDialog({ folderId: null, initial: "" })}
@@ -470,7 +489,7 @@ export function App() {
           unreadOnly={unreadOnly}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          onOpenMenu={() => setSidebarOpen(true)}
+          onToggleSidebar={handleToggleSidebar}
           onSelectArticle={handleSelectArticle}
           onToggleSort={() => setSortAsc((s) => !s)}
           onToggleUnread={() => setUnreadOnly((u) => !u)}

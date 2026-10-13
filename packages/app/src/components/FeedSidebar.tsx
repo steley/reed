@@ -22,6 +22,7 @@ interface Props {
   totalUnread: number;
   isDark: boolean;
   open: boolean; // mobile drawer state; always visible on desktop
+  collapsed: boolean; // desktop collapse state; hidden on md+ when true
   onSelectFeed(id: string | null): void;
   onAddFeed(): void;
   onAddFolder(): void;
@@ -166,6 +167,7 @@ export function FeedSidebar({
   totalUnread,
   isDark,
   open,
+  collapsed,
   onSelectFeed,
   onAddFeed,
   onAddFolder,
@@ -294,7 +296,7 @@ export function FeedSidebar({
       <aside
         className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col border-r border-line bg-panel transition-transform duration-200 md:static md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
-        }`}
+        } ${collapsed ? "md:hidden" : ""}`}
       >
         {/* Wordmark */}
         <div className="flex items-center gap-2 px-5 pb-4 pt-5">

@@ -104,6 +104,15 @@ export const Menu = (props: P) => (
   </svg>
 );
 
+/** Sidebar toggle: a panel with its left column highlighted. */
+export const PanelLeft = (props: P) => (
+  <svg {...base(props)}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M9 4v16" />
+    <path d="M5.5 7.5h1.5M5.5 10.5h1.5" />
+  </svg>
+);
+
 export const ArrowLeft = (props: P) => (
   <svg {...base(props)}>
     <path d="M19 12H5" />

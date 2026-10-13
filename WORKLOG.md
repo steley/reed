@@ -2512,3 +2512,35 @@ only the feeds table changed.
 - `noUncheckedIndexedAccess` makes `READER_SIZES[...]` possibly-undefined;
   modulo indexing needs a `?? "md"` fallback even though the logic guarantees
   a hit.
+
+## Increment — Collapsible feed sidebar (desktop)
+**Date:** 2026-10-13
+**Status:** Complete
+
+### What was built
+- Sidebar toggle button in the ArticleList header (top-left), visible on all
+  breakpoints. One button, two behaviors: on md+ it collapses/restores the
+  sidebar; below md it keeps the existing mobile-drawer behavior.
+- Desktop collapse state persisted in localStorage under `reed-sidebar`
+  ("collapsed" / "open").
+- New `PanelLeft` icon (panel with left column + tick marks) replaces the
+  three-line `Menu` icon in that slot — sidebar-toggle is the standard
+  affordance for this control (Reeder/Mail.app convention).
+
+### Decisions made
+- **Reuse the header Menu button position instead of adding a second
+  control:** it already sits flush against the sidebar boundary; one button
+  with breakpoint-dispatched semantics beats two buttons or a floating
+  restore control inside the sidebar (which would vanish when collapsed).
+- **Breakpoint dispatch in App (`matchMedia("(min-width: 768px)")`) rather
+  than two callbacks into ArticleList:** keeps ArticleList dumb — one
+  `onToggleSidebar` prop.
+- **Collapse = `md:hidden` on the aside** rather than animated width: the
+  aside is a mobile drawer (`fixed` + transform) that becomes `static` on
+  desktop; animating width would fight the transform-based mobile logic.
+  Instant show/hide is also what Reeder does.
+
+### Gotchas
+- The `Menu` icon import in ArticleList was swapped for `PanelLeft`; `Menu`
+  is still used nowhere else in the app after this (kept in icons.tsx for
+  potential reuse).
