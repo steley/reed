@@ -31308,6 +31308,17 @@ async function extractFullText(url) {
     return null;
   }
 }
+var HTML_NOISE_RE = /<(?:script|style)\b[^>]*>[\s\S]*?<\/(?:script|style)>/gi;
+var HTML_TAG_RE = /<[^>]*>/g;
+function htmlToTextLength(html) {
+  return html.replace(HTML_NOISE_RE, " ").replace(HTML_TAG_RE, " ").replace(/\s+/g, " ").trim().length;
+}
+var TRUNCATION_CHECK_MIN_REF = 200;
+function extractionLooksTruncated(extractedHtml, referenceHtml) {
+  const reference = htmlToTextLength(referenceHtml);
+  if (reference < TRUNCATION_CHECK_MIN_REF) return false;
+  return htmlToTextLength(extractedHtml) < reference * 0.5;
+}
 
 // src/lib/parse.ts
 var import_fast_xml_parser = __toESM(require_fxp(), 1);
@@ -31567,7 +31578,10 @@ async function refreshFeed(feedId, db2) {
     batch.forEach(({ article }, j) => {
       const result = results[j];
       if (result?.status === "fulfilled" && result.value) {
-        extracted.set(article.url, result.value);
+        const reference = article.content ?? article.summary ?? "";
+        if (!extractionLooksTruncated(result.value, reference)) {
+          extracted.set(article.url, result.value);
+        }
       }
     });
   }

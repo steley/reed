@@ -126,3 +126,35 @@ export async function extractFullText(url: string): Promise<string | null> {
     return null;
   }
 }
+
+// Strip tags (and script/style bodies) for rough plain-text length
+// comparison. Good enough for a sanity ratio — this is a truncation
+// detector, not a text extractor. Markdown syntax (`[text](url)`, `**`) is
+// left in on purpose: link text and emphasis text still count toward the
+// length, which is what the ratio needs.
+const HTML_NOISE_RE = /<(?:script|style)\b[^>]*>[\s\S]*?<\/(?:script|style)>/gi;
+const HTML_TAG_RE = /<[^>]*>/g;
+
+export function htmlToTextLength(html: string): number {
+  return html.replace(HTML_NOISE_RE, " ").replace(HTML_TAG_RE, " ").replace(/\s+/g, " ").trim()
+    .length;
+}
+
+// Below this reference length the ratio is noise — a one-line excerpt next
+// to a short-but-valid extraction flips the verdict for no benefit.
+const TRUNCATION_CHECK_MIN_REF = 200;
+
+/**
+ * Guard against extraction disasters: if the extracted plain text is
+ * drastically shorter than the feed-provided text we already hold
+ * (content ?? summary), Readability likely deleted real body content
+ * (e.g. a patch misfiring on an inline element) and the extraction should
+ * be discarded in favor of the feed-provided text. Catches whole-chunk
+ * loss; partial paragraph loss inside an otherwise longer extraction is
+ * undetectable by length alone.
+ */
+export function extractionLooksTruncated(extractedHtml: string, referenceHtml: string): boolean {
+  const reference = htmlToTextLength(referenceHtml);
+  if (reference < TRUNCATION_CHECK_MIN_REF) return false;
+  return htmlToTextLength(extractedHtml) < reference * 0.5;
+}

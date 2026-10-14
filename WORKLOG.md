@@ -2636,3 +2636,18 @@ still has the anchor-stripped body. To heal it, clear that row's `content`
 (null it out) and re-run refresh — extraction will re-fetch. Requires a
 manual SQL statement against the production DB (not doable from this
 sandbox; no DATABASE_URL here).
+
+### Follow-up — extraction sanity check (2026-10-14)
+- Added `extractionLooksTruncated()` + `htmlToTextLength()` to
+  `extract.ts`. At full-text prefetch time (refresh.ts), an extraction
+  whose plain-text length is < 50% of the feed-provided reference text
+  (content ?? summary, measured only when the reference is ≥ 200 chars)
+  is discarded — the article then falls back to the feed-provided body.
+  Rationale: Readability/patch misfires that delete whole chunks of body
+  content (like the inline-anchor bug above) are caught by a length
+  ratio; partial paragraph loss inside an otherwise-longer extraction is
+  undetectable this way. Markdown syntax is deliberately left unstripped
+  in the measurement — link/emphasis text still counts toward length.
+- 4 unit tests in extract.test.ts. Known limitation: refresh.test.ts DB
+  tests are skipped locally (no TEST_DATABASE_URL); the new code path is
+  exercised in CI.

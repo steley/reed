@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { extractFullText } from "./extract.ts";
+import { extractFullText, extractionLooksTruncated, htmlToTextLength } from "./extract.ts";
 
 // Hostnames resolve to a public IP in tests — the SSRF guard does a DNS
 // lookup per hop, which must never hit the network here.
@@ -155,5 +155,29 @@ describe("extractFullText", () => {
   it("never fetches a private address (SSRF guard applies)", async () => {
     expect(await extractFullText("http://127.0.0.1/x")).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("extractionLooksTruncated", () => {
+  // 250 CJK chars ≈ a substantial feed-provided excerpt
+  const longReference = `<p>${"正文内容".repeat(83)}</p>`;
+
+  it("rejects an extraction drastically shorter than the reference text", () => {
+    const stub = "<p>只有一句话的残缺提取。</p>";
+    expect(extractionLooksTruncated(stub, longReference)).toBe(true);
+  });
+
+  it("accepts an extraction comparable to or longer than the reference", () => {
+    expect(extractionLooksTruncated(longReference, longReference)).toBe(false);
+  });
+
+  it("skips the check when the reference text is too short to be meaningful", () => {
+    const stub = "<p>只有一句话的残缺提取。</p>";
+    expect(extractionLooksTruncated(stub, "<p>短摘要。</p>")).toBe(false);
+  });
+
+  it("ignores script/style bodies and tags when measuring", () => {
+    const bloated = `<style>.x{color:red}</style>${longReference}<script>const huge = "${"js".repeat(500)}";</script>`;
+    expect(htmlToTextLength(bloated)).toBe(htmlToTextLength(longReference));
   });
 });

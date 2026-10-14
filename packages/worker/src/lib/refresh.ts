@@ -4,7 +4,7 @@ import { and, eq, lt } from "drizzle-orm";
 import type { ParsedArticle, RefreshResult } from "@reed/types";
 import type { DB } from "../db/client.ts";
 import { articles, feeds } from "../db/schema.ts";
-import { extractFullText } from "./extract.ts";
+import { extractFullText, extractionLooksTruncated } from "./extract.ts";
 import { parseFeed } from "./parse.ts";
 
 const FETCH_TIMEOUT_MS = 10_000;
@@ -205,7 +205,14 @@ export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult
     batch.forEach(({ article }, j) => {
       const result = results[j];
       if (result?.status === "fulfilled" && result.value) {
-        extracted.set(article.url, result.value);
+        // Sanity check: an extraction much shorter than the feed-provided
+        // text means the extractor deleted real content — keep the
+        // feed-provided text instead (it becomes the article's body via the
+        // `article.content ?? summary` fallback downstream).
+        const reference = article.content ?? article.summary ?? "";
+        if (!extractionLooksTruncated(result.value, reference)) {
+          extracted.set(article.url, result.value);
+        }
       }
     });
   }
