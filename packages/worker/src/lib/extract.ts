@@ -15,6 +15,11 @@ const ACCEPT_HTML = "text/html,application/xhtml+xml,*/*;q=0.8";
     _headerDuplicatesTitle(node: { tagName: string; textContent: string | null }): boolean;
   };
   proto._headerDuplicatesTitle = function (node) {
+    // Keep the upstream tagName guard. Without it the top-down cleanup loop
+    // treats ANY node whose text is contained in the title as a duplicate
+    // header — e.g. an inline <a>TempMail.cc</a> at the start of a paragraph
+    // whose text happens to be a substring of the title gets deleted whole.
+    if (!/^H[1-6]$/.test(node.tagName ?? "")) return false;
     const heading = (node.textContent ?? "").toLowerCase().replace(/\s+/g, " ").trim();
     const title = (this._articleTitle ?? "").toLowerCase().replace(/\s+/g, " ").trim();
     return heading.length > 0 && title.includes(heading);

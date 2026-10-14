@@ -31241,6 +31241,7 @@ var ACCEPT_HTML = "text/html,application/xhtml+xml,*/*;q=0.8";
 {
   const proto = import_readability.Readability.prototype;
   proto._headerDuplicatesTitle = function(node) {
+    if (!/^H[1-6]$/.test(node.tagName ?? "")) return false;
     const heading = (node.textContent ?? "").toLowerCase().replace(/\s+/g, " ").trim();
     const title = (this._articleTitle ?? "").toLowerCase().replace(/\s+/g, " ").trim();
     return heading.length > 0 && title.includes(heading);

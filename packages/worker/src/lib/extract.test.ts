@@ -122,6 +122,21 @@ describe("extractFullText", () => {
     expect(content).toContain("Body paragraph 0");
   });
 
+  it("keeps an inline link whose text is contained in the page title", async () => {
+    // Regression: the CJK patch for _headerDuplicatesTitle dropped the
+    // upstream H1/H2 tagName guard, so Readability's top-down cleanup
+    // deleted any node whose text was a substring of the title — including
+    // an inline <a>TempMail.cc</a> at the start of a body paragraph.
+    const page = `<!doctype html><html><head><title>TempMail.cc - 用 AI 重构了一下</title></head><body><article>
+      <p><a href="https://tempmail.cc">TempMail.cc</a> 是什么时候上线的我都忘了，应该是有好几年了。</p>
+      ${Array.from({ length: 6 }, (_, i) => `<p>Body paragraph ${i} with enough text for the readability scorer.</p>`).join("\n")}
+    </article></body></html>`;
+    vi.mocked(fetch).mockResolvedValue(new Response(page, { status: 200 }));
+
+    const content = await extractFullText("https://blog.example.com/post");
+    expect(content).toContain("TempMail.cc</a> 是什么时候");
+  });
+
   it("returns null on HTTP failure", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("nope", { status: 404 }));
     expect(await extractFullText("https://blog.example.com/post")).toBeNull();

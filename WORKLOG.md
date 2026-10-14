@@ -2591,3 +2591,48 @@ only the feeds table changed.
   `pnpm --filter @reed/app dev` on :5173, which proxies `/api` → 8787.
 - Biome `useJsxKeyInIterable` flagged the two `.map()`s in Landing; fixed
   with `key={f.title}` / `key={k}`.
+
+## Increment — Fix: full-text extraction deleting an inline link matching the title
+**Date:** 2026-10-14
+**Status:** Complete
+
+### What happened
+User reported: an article whose original text opens with
+"TempMail.cc 是什么时候上线的我都忘了" rendered in the reader as
+"是什么时候上线的我都忘了" — the leading
+`<a href="https://tempmail.cc">TempMail.cc</a>` (tag AND text) vanished.
+
+### Root cause
+`packages/worker/src/lib/extract.ts` patches
+`Readability.prototype._headerDuplicatesTitle` to fix CJK headings being
+deleted by upstream token-overlap similarity. The patch replaced similarity
+with plain containment (title includes heading text) but **dropped the
+upstream `tagName == "H1" || "H2"` guard**. Readability's top-down cleanup
+loop calls this check on nodes while walking the document and deletes the
+FIRST match. Any element whose textContent is a substring of the article
+title now qualifies — here the inline anchor at the start of the first
+paragraph: its text "TempMail.cc" is contained in the title
+"TempMail.cc - 用 AI 重构了一下 · 邮箱说", so the whole anchor was removed.
+
+### Fix
+- Restore a tagName guard in the patched `_headerDuplicatesTitle`
+  (`/^H[1-6]$/`) while keeping the containment comparison that fixed the
+  original CJK issue. Non-heading nodes can never be "duplicate title
+  headers" again.
+- Regression test in `extract.test.ts`: inline link whose text is contained
+  in the page title must survive extraction.
+
+### Investigation notes (for future debugging)
+- Verified the loss was NOT in: marked rendering, DOMPurify, absolutizeUrls
+  (its `new URL(value, base)` normalization adds a trailing slash — beware
+  when writing substring assertions like `tempmail.cc">`), or restoreQuotes.
+- The loss reproduced only when extract.ts's prototype patch was loaded;
+  verbatim copies of the pipeline without the patch kept the anchor.
+
+### Follow-up needed (production data)
+`refreshFeed()` never overwrites `content` for existing articles (by design:
+"content never shrinks"). The already-stored article row in production
+still has the anchor-stripped body. To heal it, clear that row's `content`
+(null it out) and re-run refresh — extraction will re-fetch. Requires a
+manual SQL statement against the production DB (not doable from this
+sandbox; no DATABASE_URL here).
