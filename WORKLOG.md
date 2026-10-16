@@ -2651,3 +2651,34 @@ sandbox; no DATABASE_URL here).
 - 4 unit tests in extract.test.ts. Known limitation: refresh.test.ts DB
   tests are skipped locally (no TEST_DATABASE_URL); the new code path is
   exercised in CI.
+
+---
+
+## Increment — Article links open in a new tab
+**Date:** 2026-10-16
+**Status:** Complete
+
+### What was built
+- All links inside sanitized article HTML now open in a new tab so reading
+  is never interrupted. Implemented as a DOMPurify `afterSanitizeAttributes`
+  hook in `packages/app/src/lib/sanitize.ts`: every `<a>` gets
+  `target="_blank"` + `rel="noopener noreferrer"` forced on it, overriding
+  any `target` the feed markup itself declares. The hook installs once via a
+  module-level flag.
+
+### Decisions made
+- **Sanitizer hook over render-layer post-processing:** every article HTML
+  string already flows through `sanitizeArticleHtml()`, so a hook there
+  covers markdown-rendered links, raw feed HTML links, and relative URLs in
+  one place with no extra DOM walk in the reader component.
+- **`noopener noreferrer` rather than `noopener` alone:** DOMPurify docs
+  recommend both when forcing `target=_blank` on untrusted content; the
+  referer leak is also worth plugging for privacy.
+
+### Gotchas
+- The reader header's "open original" button already had `target="_blank"`
+  — left untouched.
+- Two new tests in `sanitize.test.ts` (multi-link coverage, source-declared
+  `target="_self"` override). 7/7 pass. Note: `pnpm --filter @reed/app test`
+  gets SIGTERM'd (exit 137) in the agent sandbox; ran vitest directly from
+  the `.pnpm` store path instead — same suite, same result.

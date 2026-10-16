@@ -36,4 +36,18 @@ describe("sanitizeArticleHtml", () => {
     const html = sanitizeArticleHtml('<svg onload="alert(1)"><circle/></svg>');
     expect(html).not.toContain("onload");
   });
+
+  it("opens all links in a new tab with noopener", () => {
+    const html = sanitizeArticleHtml(
+      '<p><a href="https://a.com">A</a> <a href="/relative">B</a></p>',
+    );
+    expect(html.match(/target="_blank"/g)).toHaveLength(2);
+    expect(html.match(/rel="noopener noreferrer"/g)).toHaveLength(2);
+  });
+
+  it("forces new-tab attributes even when the source claims its own target", () => {
+    const html = sanitizeArticleHtml('<a href="https://a.com" target="_self">A</a>');
+    expect(html).toContain('target="_blank"');
+    expect(html).not.toContain("_self");
+  });
 });
