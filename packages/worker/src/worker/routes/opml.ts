@@ -31,7 +31,7 @@ opmlRouter.get("/", async (c) => {
   return new Response(xml, {
     headers: {
       "Content-Type": "text/xml; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="reed.opml"',
+      "Content-Disposition": `attachment; filename="reed-${new Date().toISOString().slice(0, 10)}.opml"`,
     },
   });
 });

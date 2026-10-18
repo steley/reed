@@ -2654,6 +2654,31 @@ sandbox; no DATABASE_URL here).
 
 ---
 
+## Increment — OPML export filename gets a date suffix
+**Date:** 2026-10-18
+**Status:** Complete
+
+### What was built
+- OPML export (`GET /api/opml`) download filename changed from fixed
+  `reed.opml` to `reed-YYYY-MM-DD.opml` (UTC date via
+  `new Date().toISOString().slice(0, 10)`), so repeated exports don't
+  collide in the Downloads folder. One-line change in
+  `packages/worker/src/worker/routes/opml.ts`; export test assertion
+  updated to a regex matching the dated pattern.
+
+### Decisions made
+- **UTC date, no timezone juggling:** the filename is a convenience label,
+  not a record; UTC keeps it a pure string operation with no dependency on
+  server TZ. Acceptable that a UTC-day boundary differs from local time.
+
+### Verification notes
+- `tsc --noEmit` passes.
+- DB-backed test suite skips locally (no `TEST_DATABASE_URL`); the export
+  test collects cleanly and the filename expression was verified directly
+  (`reed-2026-10-18.opml`).
+
+---
+
 ## Increment — Article links open in a new tab
 **Date:** 2026-10-16
 **Status:** Complete

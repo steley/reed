@@ -110,7 +110,9 @@ describe("GET /api/opml", () => {
     const res = await call("/api/opml");
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toContain("text/xml");
-    expect(res.headers.get("Content-Disposition")).toContain("reed.opml");
+    expect(res.headers.get("Content-Disposition")).toMatch(
+      /^attachment; filename="reed-\d{4}-\d{2}-\d{2}\.opml"$/,
+    );
 
     const xml = await res.text();
     const data = parseOpml(xml);
