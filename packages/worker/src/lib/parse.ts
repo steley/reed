@@ -1,13 +1,20 @@
 import { XMLParser } from "fast-xml-parser";
 import type { ParsedArticle, ParsedFeed, ParsedFeedMeta } from "@reed/types";
 
+// refresh.ts caps feed responses at 5 MB. An XML entity occupies at least 3
+// bytes ("&a;"), so 5M is a hard ceiling on the expansions any accepted feed
+// can contain. Full-text feeds encode every HTML tag as &lt;/&gt;: a ~3.9 MB
+// Hugo feed carries ~288k entities, enough to blow past the old 100k cap.
+// These are built-in entities, not DTD expansion bombs — the DTD guards
+// (maxEntitySize, maxEntityCount, maxExpansionDepth, maxExpandedLength) stay
+// at their defaults.
+const MAX_ENTITY_EXPANSIONS = 5_000_000;
+
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
   isArray: (name) => ["item", "entry"].includes(name),
-  // Raise entity expansion limit — default of 1000 is too low for feeds with
-  // rich content:encoded fields containing many escaped HTML entities.
-  processEntities: { maxTotalExpansions: 100000 },
+  processEntities: { maxTotalExpansions: MAX_ENTITY_EXPANSIONS },
   // Decode numeric entities (&#8211;, &#039;, …) — without this only the five
   // named XML entities are decoded and titles keep raw "&amp;#8211;" text.
   htmlEntities: true,
@@ -21,8 +28,12 @@ export function parseFeed(xml: string): ParsedFeed | null {
   let parsed: Record<string, unknown>;
   try {
     parsed = parser.parse(xml) as Record<string, unknown>;
-  } catch {
-    return null;
+  } catch (err) {
+    // Parser failures (malformed XML, entity/DTD limits) used to be swallowed
+    // and surfaced as "unrecognized format" — actively misleading. A parseable
+    // document that simply isn't RSS/Atom still returns null below.
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Feed XML parser error: ${reason}`);
   }
 
   if (isRss(parsed)) {

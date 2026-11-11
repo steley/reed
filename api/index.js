@@ -31322,13 +31322,12 @@ function extractionLooksTruncated(extractedHtml, referenceHtml) {
 
 // src/lib/parse.ts
 var import_fast_xml_parser = __toESM(require_fxp(), 1);
+var MAX_ENTITY_EXPANSIONS = 5e6;
 var parser = new import_fast_xml_parser.XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
   isArray: (name) => ["item", "entry"].includes(name),
-  // Raise entity expansion limit — default of 1000 is too low for feeds with
-  // rich content:encoded fields containing many escaped HTML entities.
-  processEntities: { maxTotalExpansions: 1e5 },
+  processEntities: { maxTotalExpansions: MAX_ENTITY_EXPANSIONS },
   // Decode numeric entities (&#8211;, &#039;, …) — without this only the five
   // named XML entities are decoded and titles keep raw "&amp;#8211;" text.
   htmlEntities: true
@@ -31337,8 +31336,9 @@ function parseFeed2(xml) {
   let parsed;
   try {
     parsed = parser.parse(xml);
-  } catch {
-    return null;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Feed XML parser error: ${reason}`);
   }
   if (isRss(parsed)) {
     return parseRss(parsed);
@@ -31548,7 +31548,13 @@ async function refreshFeed(feedId, db2) {
     throw new Error(`Feed not found: ${feedId}`);
   }
   const xml = await fetchFeedXml(feed.url);
-  const parsed = parseFeed2(xml);
+  let parsed;
+  try {
+    parsed = parseFeed2(xml);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to parse feed ${feed.url}: ${reason}`);
+  }
   if (!parsed) {
     throw new Error(`Failed to parse feed ${feed.url}: unrecognized format`);
   }

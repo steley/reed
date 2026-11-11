@@ -1,7 +1,7 @@
 import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
 import { and, eq, lt } from "drizzle-orm";
-import type { ParsedArticle, RefreshResult } from "@reed/types";
+import type { ParsedArticle, ParsedFeed, RefreshResult } from "@reed/types";
 import type { DB } from "../db/client.ts";
 import { articles, feeds } from "../db/schema.ts";
 import { extractFullText, extractionLooksTruncated } from "./extract.ts";
@@ -150,8 +150,16 @@ export async function refreshFeed(feedId: string, db: DB): Promise<RefreshResult
 
   const xml = await fetchFeedXml(feed.url);
 
-  // Parse the feed
-  const parsed = parseFeed(xml);
+  // Parse the feed. Keep the URL in the error so the sidebar's error dot and
+  // cron logs can identify the feed; surface the parser's real reason instead
+  // of collapsing every failure into "unrecognized format".
+  let parsed: ParsedFeed | null;
+  try {
+    parsed = parseFeed(xml);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to parse feed ${feed.url}: ${reason}`);
+  }
   if (!parsed) {
     throw new Error(`Failed to parse feed ${feed.url}: unrecognized format`);
   }

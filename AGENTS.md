@@ -105,6 +105,15 @@ reed/
 | Linter | Biome | Fast Rust-based linter + formatter, consistent with vega repo, single config at root |
 | Language | TypeScript (strict) | `strict: true` + `noUncheckedIndexedAccess` throughout |
 
+`lib/parse.ts` must keep `processEntities.maxTotalExpansions` at 5,000,000 —
+the hard ceiling implied by the 5 MB response cap (an entity costs ≥3 bytes).
+Full-text feeds encode every HTML tag as `&lt;`/`&gt;`; a 3.9 MB feed holds
+~288k entities, which blew past the old 100k cap. DTD-entity guards stay at
+their defaults. `parseFeed()` throws with the parser's real message on parse
+failure; `null` is reserved for parseable XML that isn't RSS/Atom. Never
+swallow a parser exception into "unrecognized format" — it misdiagnoses large
+feeds as bad URLs.
+
 ---
 
 ## Key Design Decisions

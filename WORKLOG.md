@@ -2707,3 +2707,79 @@ sandbox; no DATABASE_URL here).
   `target="_self"` override). 7/7 pass. Note: `pnpm --filter @reed/app test`
   gets SIGTERM'd (exit 137) in the agent sandbox; ran vitest directly from
   the `.pnpm` store path instead — same suite, same result.
+
+---
+
+## Increment — Fix: large full-text feeds reported as "unrecognized format"
+**Date:** 2026-11-11
+**Status:** Complete
+
+### What happened
+User added `https://blog.debuginn.com/index.xml` (a Hugo full-content RSS
+feed). No articles appeared; the sidebar error dot showed
+`failed to parse feed .../index.xml: unrecognized format`.
+
+### Root cause
+The feed is a perfectly valid RSS 2.0 document, but it is **3,884,595 bytes**
+with **203 items** and **288,096 XML entities** — every HTML tag in every
+full-text `<description>` is written as `&lt;`/`&gt;`. `parse.ts` capped
+`processEntities.maxTotalExpansions` at 100,000 (raised from the parser
+default of 1,000 back in the 2026-03-28 increment). `fast-xml-parser` throws
+`Entity expansion limit exceeded: 100806 > 100000` when the counter crosses
+the cap. `parseFeed()` had a bare `catch { return null }`, so the real error
+was discarded, `refreshFeed()` fell through to its `if (!parsed)` branch, and
+`lastError` got the misleading "unrecognized format". Same failure mode as the
+2026-03-28 bug — the constant was simply bumped once instead of bounded.
+
+### Fix
+- `packages/worker/src/lib/parse.ts`: `MAX_ENTITY_EXPANSIONS = 5_000_000`,
+  aligned with `refresh.ts`'s 5 MB response cap. Since one XML entity costs
+  at least 3 bytes (`&a;`), 5M is a hard ceiling on expansions for any feed
+  the app accepts — no more guessing a number that the next big feed breaks.
+  DTD-entity protections (`maxEntitySize`, `maxEntityCount`,
+  `maxExpansionDepth`, `maxExpandedLength`) are left at their defaults; in
+  4.5.5 the latter only applies to DOCTYPE-defined entities, so built-in
+  `&lt;`/`&amp;` replacements are unaffected by it.
+- `parseFeed()` now **throws** `Feed XML parser error: <reason>` on parser
+  exceptions. `null` still means "parseable XML that isn't RSS/Atom". Keeping
+  the error changes nothing about success/failure, but `lastError` becomes
+  actionable instead of blaming the URL.
+- `refreshFeed()` wraps `parseFeed()` and prefixes the feed URL, so cron logs
+  and the manual-refresh 502 keep their existing context.
+- Two regression tests in `parse.test.ts`: a feed with 104k escaped entities
+  parses (old cap would throw), and a DOCTYPE declaring 101 entities still
+  throws with the parser's real message (DTD guard intact, no silent null).
+
+### Decisions made
+- **Bound the limit to the input size, not a guessed constant.** Dynamic
+  per-call parser construction was rejected: the module-level `XMLParser`
+  instance is cheap to reuse and the 5 MB cap already bounds memory/CPU.
+- **Do not disable entity processing or `htmlEntities`.** Both are needed to
+  decode numeric entities and to turn escaped HTML into renderable article
+  bodies; the DTD guards remain for actual entity-expansion attacks.
+- **Did not touch `FETCH_TIMEOUT_MS` (10s).** The production error was a parse
+  failure, which proves the body was fully downloaded within the timeout.
+  Slow-download tuning is a separate concern (already noted in the
+  2026-10-11 increment).
+
+### Verification
+- Real feed via proxy: old config throws at 100806 expansions; new
+  `parseFeed()` parses the full 3.88 MB / 203 articles in ~98 ms, meta
+  `Debug客栈`, first article `Starryblu 使用指南…` with a 7,116-char body.
+- Synthetic 4.26 MB / 128k-entity feed: old config threw, new config returns
+  270 articles. `parse.test.ts`: 17/17 pass.
+
+### Gotchas / follow-up
+- Local direct download of this host is ~12 KB/s (25s yielded 294 KB); the
+  socks5 proxy at 127.0.0.1:1089 pulls all 3.88 MB in ~6s. Use the proxy when
+  reproducing slow feeds.
+- Entity count estimated by linear extrapolation from the first 294 KB was
+  120k — actual is 288k. Feed entity density varies a lot per item; never
+  size the cap from a partial sample.
+- **Unresolved risk:** 203 new articles means ~406 sequential neon-http
+  queries (one select + one insert each) in `refreshFeed()`. The hourly
+  GitHub Actions cron has no function time limit and should complete, but a
+  manual `POST /api/feeds/:id/refresh` through Vercel may hit the default
+  function duration and time out before committing the last rows. Not changed
+  here (batching the upserts is a separate, riskier change). If the user still
+  sees no articles after one cron run, this is the next thing to investigate.

@@ -200,6 +200,37 @@ describe("parseFeed — edge cases", () => {
     expect(result!.meta.title).toBe("Foo – Bar");
     expect(result!.articles[0]!.title).toBe("It's 'quoted'");
   });
+
+  it("parses full-text feeds with more than 100k escaped HTML entities", () => {
+    // Regression: a ~3.9 MB Hugo feed with every HTML tag written as &lt;/&gt;
+    // carries ~120k entities. The old maxTotalExpansions: 100000 made the
+    // parser throw, which was swallowed as "unrecognized format".
+    const manyEntities = "&lt;p&gt;text&lt;/p&gt;".repeat(26_000); // 104k entities
+    const feed = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Entity Heavy Full-Text Feed</title>
+    <link>https://example.com</link>
+    <item>
+      <title>Big Article</title>
+      <link>https://example.com/big</link>
+      <description>${manyEntities}</description>
+    </item>
+  </channel>
+</rss>`;
+    const result = parseFeed(feed);
+    expect(result).not.toBeNull();
+    expect(result!.articles).toHaveLength(1);
+    expect(result!.articles[0]!.summary).toContain("<p>text</p>");
+    expect(result!.articles[0]!.summary!.length).toBeGreaterThan(100_000);
+  });
+
+  it("surfaces XML parser errors instead of reporting unrecognized format", () => {
+    // The DTD entity guard must still fire, and its reason must reach callers.
+    const defs = Array.from({ length: 101 }, (_, i) => `<!ENTITY e${i} "x">`).join("");
+    const feed = `<?xml version="1.0"?><!DOCTYPE rss [${defs}]><rss version="2.0"><channel><title>T</title></channel></rss>`;
+    expect(() => parseFeed(feed)).toThrow(/Feed XML parser error: Entity count/);
+  });
 });
 
 describe("parseFeed — Atom link rel fallback", () => {
